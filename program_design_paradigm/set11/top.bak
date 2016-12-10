@@ -1,0 +1,34 @@
+#lang racket
+
+(require "WidgetWorks.rkt")
+(require "interfaces.rkt")
+(require "ControllerFactory.rkt")
+(require "Model.rkt")
+(require "World.rkt")
+(require 2htdp/image)
+(require 2htdp/universe)
+
+(define CANVAS-WIDTH 600)
+(define CANVAS-HEIGHT 500)
+
+
+(provide run)
+
+;; run    : PosReal -> Void
+;; GIVEN  : rate at which the simulating will run.
+;; EFFECT : Creates the model-view-controller simulation and
+;;          runs it with the given frame rate.
+(define (run rate)
+  (local
+    ((define mymodel (new Model%))
+     (define mycontainer (container-init CANVAS-WIDTH CANVAS-HEIGHT))
+     (define myworld (new World% [model mymodel])))
+    (begin
+      (send myworld add-widget
+        (new ControllerFactory% [world myworld][mod mymodel]))
+      (send mycontainer add-stateful-widget myworld)
+      (send mycontainer run rate))))
+   
+        
+ 
+(run 0.25)

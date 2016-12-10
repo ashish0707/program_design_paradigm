@@ -1,0 +1,35 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-beginner-reader.ss" "lang")((modname q4) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+(require rackunit)
+(require "extras.rkt")
+(check-location "01" "q4.rkt")
+
+
+;; DATA DEFINITIONS: none
+
+;; string-last String RealNumber-> String          
+;; GIVEN: A String in which "_" is to be inserted and Position at which it is to be inserted
+;; RETURNS: A String with "_" inserted at ith position.
+;; EXAMPLES:
+;; (string-insert "ashish" 2) "as_hish"
+;; (string-insert "hello" 3) "hel_lo"
+;; DESIGN STRATEGY: Combine simpler functions
+
+(provide string-insert)
+
+(define (string-insert str position)
+  (if (or (<= (string-length str) 0) (<= (string-length str) position)) "Cannot insert _ at given position" 
+  (string-append (substring str 0 position) "_" (substring str position (string-length str))))
+  
+  )
+
+;; TESTS
+(begin-for-test
+  (check-equal?  (string-insert "ashish" 10) "Cannot insert _ at given position"
+     " _ inserted incorrectly")
+ (check-equal?  (string-insert "hello" 3) "hel_lo"
+    " _ inserted incorrectly")
+ (check-equal?  (string-insert "" 3) "Cannot insert _ at given position"
+    " _ inserted incorrectly")
+ )

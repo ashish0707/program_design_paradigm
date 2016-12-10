@@ -1,0 +1,304 @@
+#lang racket
+(require "interfaces2.rkt")
+(require rackunit)
+(require "extras.rkt")
+(require "sets.rkt")
+(require 2htdp/universe)   
+(require 2htdp/image)
+
+(provide
+ Sblock%:
+ make-block
+ )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; CONSTANTS
+
+;; CANVAS
+(define THROBBER-CHANGING-FACTOR 1)
+(define CANVAS-WIDTH 500)
+(define CANVAS-HEIGHT 600)
+(define CANVAS-WIDTH-HALF (/ CANVAS-WIDTH 2))
+(define CANVAS-HEIGHT-HALF (/ CANVAS-HEIGHT 2))
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Sblock
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; make-throbber: PosInt PosInt -> Toy
+;; GIVEN    : an x and a y position of a throbber
+;; RETURNS  : an object representing a throbber at the given position.
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-block x y listOfSblock)
+  (new Sblock%: [x x][y y]
+       [sblock-mouse-x-diff -1]
+       [sblock-mouse-y-diff -1]
+       [playground-sblocks listOfSblock]
+       ))
+
+
+;; Constructor template for Throbber%:
+;; A Throbber is a (new Throbber%: [x Integer][y Integer]
+;;  [throb-mouse-x-diff Integer][throb-mouse-y-diff Integer] [r Integer])
+;; Interpretation : An object of class Throbber%: represents
+;;                  a thobber.
+(define Sblock%:
+  (class* object% (Sblock<%>)
+    (init-field x y)                ; x and y coordinate of sblock
+    (init-field sblock-mouse-x-diff) ; difference between sblock's x and mouse
+    ; pointer's x coordinate.
+    (init-field sblock-mouse-y-diff) ; difference between sblock's y and mouse
+    ; pointer's y coordinate.
+    (init-field playground-sblocks) ; difference between sblock's y and mouse
+    ; pointer's y coordinate.
+    (field [side 20])                  ; the side of the sblock.
+    (init-field [selected? false])          ; the states whether the sblock's is
+    ; selected.
+    
+    (field [teammates empty])
+    
+    ;; image for displaying the sblock when unselected
+    (field [SBLOCK-UNSELECTED (square side "outline" "green")])
+    
+    ;; image for displaying the sblock when selected
+    (field [SBLOCK-SELECTED (square side "outline" "red")])
+    
+    
+    (super-new)
+    
+    ;; after-tick : -> Void
+    ;; EFFECT  : A Sblock like this one, but as it should
+    ;;            be after a tick
+    (define/public (after-tick)
+      1)
+    
+    (define/public (get-team)
+      teammates) 
+    
+    ;; add-teammate : Sblock -> void
+    (define/public (add-teammate sblock)
+      (begin
+        (set! teammates (set-cons sblock teammates))
+        ;remove the sblock from playground sblock list
+        (remove-block-from-playground-blocks sblock)
+        ))
+    
+    ;; remove-block-from-playground-blocks : Sblock -> void
+    (define (remove-block-from-playground-blocks sb)
+      (begin
+        (println (length playground-sblocks))
+        (set! playground-sblocks
+              (filter 
+               (lambda (b)
+                 (not (equal? b sb))) playground-sblocks))
+        (println (length playground-sblocks))))
+    
+    (define (blocks-instersect? sblock)
+      (begin
+        (and
+         (and (<=  (send sblock sblock-x) (+ x side))
+              (>=  (send sblock sblock-x) (- x side)))
+         (and (<=  (send sblock sblock-y) (+ y side))
+              (>=  (send sblock sblock-y) (- y side))))))
+    
+    (define/public (add-to-playground-sblocks sblock)
+      (begin 
+        (println "adding new sblock to background list")
+        (set! playground-sblocks (cons sblock playground-sblocks))))
+    
+    ;; to-scene : Scene -> Scene
+    ;; GIVEN    : a scene to paint the throbber.
+    ;; RETURNS  : a scene like the given one, but with
+    ;;            this thobber painted on it.
+    ;; STRATEGY : Cases on whether the throbber is selected.
+    (define/public (add-to-scene scene)
+      (if selected?
+          (place-image SBLOCK-SELECTED x y scene)
+          (place-image SBLOCK-UNSELECTED x y scene)))
+    
+    
+    ;; after-button-down : NonNegInt NonNegInt -> Void
+    ;; GIVEN    : the location of a button-down event
+    ;; RETURNS  : a throbber like the given one, but after the mouse
+    ;;            button is pressed.
+    ;; STRATEGY : Cases on whether the mouse is within the sblock.
+    (define/public (after-button-down mx my)
+      (if (inside-sblock? x y mx my)
+          (begin
+            (set! sblock-mouse-x-diff (- x mx)) 
+            (set! sblock-mouse-y-diff (- y my))
+            (set! selected? true)
+            (for-each 
+             (lambda(b)
+               (send b update-x-y-diff mx my))
+             teammates)
+            this)
+          this)) 
+    
+    (define/public (update-x-y-diff mx my)
+      (set! sblock-mouse-x-diff (- x mx)) 
+      (set! sblock-mouse-y-diff (- y my))
+      )
+    
+    
+    ;; after-drag : NonNegInt NonNegInt -> Throbber<%>
+    ;; GIVEN    : the x and y coordinates of the mouse pointer.
+    ;; RETURNS  : a throbber like the given one, dragging it based on the
+    ;;            given mouse coordinates.
+    ;; EXAMPLE  : THROBBER-AT-100-100 -> (new Throbber%: [x x][y y]
+    ;;                                   [throb-mouse-x-diff 101]
+    ;;                                   [throb-mouse-y-diff 101]
+    ;;                                   [r 6][selected? true]
+    ;;                                   [expanding? true]) where
+    ;;                                   mx, my is 101,101 resp.
+    ;; STRATEGY : Divide into Cases on whether the throbber is selected.
+    (define/public (after-drag mx my)
+      (if selected? 
+          (begin    
+            (set! x (+ mx sblock-mouse-x-diff))
+            (set! y (+ my sblock-mouse-y-diff))
+            (check-playground-sblock-for-intersection mx my)
+            (for-each
+             (lambda (sblock) (send sblock move-teammate mx my)) teammates))
+          1))     
+    
+    (define (check-playground-sblock-for-intersection mx my)
+      (for-each
+       (lambda (sblock)
+         (if (blocks-instersect? sblock)
+             (begin
+               (println "blocks intersect adding sblock to team")
+               ;add sblock and its teammates to current sblock
+               (add-teammate sblock)
+               (for-each
+                (lambda (block)
+                  (add-teammate block)) 
+                (send sblock get-team))
+               
+               ;add current block and its teammates to sblock
+               (send sblock add-teammate this)
+               (for-each
+                (lambda (block)
+                  (send sblock add-teammate block))
+                teammates)
+               
+               ;add current block to each teammate of sblock
+               (for-each
+                (lambda (block)
+                  (send block add-teammate this))
+                (send sblock get-team))
+
+               ;add sblock to each teammate of current block
+               (for-each
+                (lambda (block)
+                  (send block add-teammate sblock))
+                teammates)
+               
+               
+               ;update the mouse-x,y diff of the teammates.
+               (for-each 
+                (lambda(b)
+                  (send b update-x-y-diff mx my))
+                teammates))
+             
+             
+             "do-nothing"))
+       playground-sblocks)) 
+    ;; 1 2  ;; 1 6
+    ;; 2 3
+    ;; 3 4
+    ;; 4 5
+    (define (add-block-to-each-teammate sblock)
+      (for-each
+       (lambda (block)
+         (send block add-teammate this))
+       (send sblock get-team)))
+
+      
+      
+      (define/public (move-teammate mx my)
+        (set! x (+ mx sblock-mouse-x-diff))
+        (set! y (+ my sblock-mouse-y-diff))
+        )
+      
+      
+      
+      ;; after-button-up : NonNegInt NonNegInt -> Throbber<%>
+      ;; GIVEN    : the x and y coordinates of mouse pointer.
+      ;; RETURNS  : a throbber like the given one, but making it unselected.
+      ;; EXAMPLE  : THROBBER-AT-100-100 -> (new Throbber%: [x x][y y]
+      ;;                                   [throb-mouse-x-diff 100]
+      ;;                                   [throb-mouse-y-diff 100]
+      ;;                                   [r 6][selected? false]
+      ;;                                   [expanding? true]) where
+      ;;                                   mx, my is 100,100 resp.
+      ;; STRATEGY : combine simpler functions
+      (define/public (after-button-up mx my)
+        (begin
+          (set! selected? false)
+          this)) 
+      
+      
+      ;; inside-sblock? : Integer Integer Integer Integer -> Boolean
+      ;; GIVEN    : x and y coordinates of two points respectively.
+      ;; RETURNS  : true iff the given coordinate is inside the given sblock.
+      ;; EXAMPLES : see tests below
+      ;; STRATEGY : Combine simpler function
+      (define (inside-sblock? x y mx my)
+        (and  
+         (and (< mx (+ x (/ side 2))) (> mx (- x (/ side 2))))
+         (and (< my (+ y (/ side 2))) (> my (- y (/ side 2))))))
+      
+      
+      
+      ;; after-key-event : KeyEvent -> Throbber<%>
+      ;; RETURNS: A Throbber like this one, but as it should be after the
+      ;; given key event.
+      ;; EXAMPLE  : THROBBER-AT-100-100 -> THROBBER-AT-100-100
+      ;; DETAILS: a Throbber ignores key events
+      (define/public (after-key-event kev) this)
+      
+      
+      ;; test methods, to test; the throbber state.
+      (define/public (for-test:x) x)
+      (define/public (for-test:y) y)
+      (define/public (for-test:selected?) selected?)
+      
+      
+;; after-drag : NonNegInt NonNegInt -> Throbber<%>
+      ;; GIVEN: the location of a move event
+      ;; RETURNS : a throbber like the given one, but after a move mouse event
+      ;; EXAMPLE  : THROBBER-AT-100-100 -> THROBBER-AT-100-100
+      ;; DETAILS: a Throbber ignores after-move
+      (define/public (after-move  mx my)
+        this)
+      
+      
+      ;; -> Int
+      ;; RETURNS: the x position of the center of the sblock
+      (define/public (sblock-x)
+        x)
+      
+      ;; -> Int
+      ;; RETURNS: the y position of the center of the sblock
+      (define/public (sblock-y)
+       y)
+      
+      ))
+  
+  
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TESTING FRAMEWORK - Sblock ;;;;;;;;;;;;;;;;
+  
+  ;(define THROBBER-AT-100-100 (make-throbber 100 100))
+  ;;; throbber-equal? Throbber Throbber -> Boolean
+  ;(define (throbber-equal? t1 t2)
+  ;  (= (send t1 toy-data)
+  ;     (send t2 toy-data)))
+  ;
+  ;(define (throbber-selected-equal? t1 t2)
+  ;  (equal? (send t1 for-test:selected?)
+  ;          (send t2 for-test:selected?)))

@@ -1,0 +1,27 @@
+TA-1 Name:- sumit (sghosh)
+TA-2 Name:- vijay (vijay86)
+
+Design Grade for q1:- A
+Design Grade for q2:- A
+Correctness Score for q1:- 15/15
+Correctness Score for q2:- 8/15
+
+1) 
+
+Student1 CCIS ID:- sugandhakher
+Presentation Grade:- AB
+TA Comments on Presentation:-
+
+1) if cubelets are outside the canvas, can those cubelets become teammates? - couldn’t answer
+2) How is the container and the world related? - couldn’t answer
+3) why do you have saved-mx and saved-my?
+4) How do you determine when a block intersects another block. -> could not explain
+5) If the current block intersects with another block, what are the changes you make to the other block - could not explain
+
+Student2 CCIS ID:- ashish0707
+Presentation Grade:- A
+TA Comments on Presentation:-
+
+1) If the current block intersects with another block, what are the changes you make to the other block - answered
+2) Why is the world added to the container - answered
+3) How q1 different in set 10 - answered

@@ -1,0 +1,159 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-beginner-reader.ss" "lang")((modname snack-machine) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+(require rackunit)
+(require "extras.rkt")
+(check-location "02" "fsm.rkt")
+
+;; DATA DEFINITION:
+;A CustomerInput is one of
+;-- a PosInt        interp: insert the specified number of quarters
+;-- "kale"          interp: request a bag of kale chips
+;-- "carrots"       interp: request a bag of carrots
+;-- "change"        interp: return all the unspent money that the
+
+;A MachineOutput is one of
+;-- "kale"           interp: machine dispenses a bag of kale chips
+;-- "carrots"        interp: machine dispenses a bag of carrot sticks
+;-- "Out of Item"    interp: machine displays "Out of Item"
+;-- a PosInt         interp: machine releases the specified number of quarters
+;-- "Nothing"        interp: the machine does nothing
+
+
+;; TEMPLATE
+;; custInput-fn : ci -> ??
+;(define (custInput-fn ci)
+;  (cond
+;    [(number=? ci)    
+;     ...]
+;    [(string=? ci "kale")    
+;     ...]
+;    [(string=? ci "carrots")    
+;     ...]
+;    [(string=? ci "change")
+;     ...]
+;))
+
+;; TEMPLATE
+;; machOutput-fn : mo -> ??
+;(define (custInput-fn ci)
+;  (cond
+;    [(number=? mo)    
+;     ...]
+;    [(string=? mo "kale")    
+;     ...]
+;    [(string=? mo "carrots")    
+;     ...]
+;    [(string=? mo "nothing")
+;     ...]
+;    [(string=? mo "Out of Item")
+;     ...]))
+
+
+(define-struct MachineState (CarrotBags,KaleBags,Bank))
+(define-struct Bank (amount))
+
+;; INTERP:
+;; A MachineState is a (make-MachineState Integer Integer Struct)
+;; CarrotBags and KaleBags are the number of the bags of carrot and kale respectively currently present in the machine. 
+;; A Bank is (make-Bank PosInt PosInt)
+;; Amount is the amount collected from purchases of the customer.
+;; Unspecified is the amount customer inserted in machine but haven't dont any transaction yet.
+
+;; TEMPLATE:
+;; (define (ms-fn MachineState)
+;;   (...
+;;     (ms-fn CarrotBags) (ms-fn KaleBags) (ms-fn bank) ))
+
+;; TEMPLATE:
+;; (define (bank-fn Bank)
+;;   (...
+;;     (bank-fn amount)
+;;     (bank-fn unspecified)))
+
+;initial-machine : NonNegInt NonNegInt -> MachineState
+;GIVEN: a number of bags of kale chips and carrot sticks
+;RETURNS: the state of a machine loaded with the given numbers of bags
+;of kale chips and carrot sticks, with an empty bank.
+(define (initial-state carrotbags kalebags)
+  (make-MachineState carrotbags kalebags (make-Bank 0 0)))
+
+
+
+;machine-next-state : MachineState CustomerInput -> MachineState
+;GIVEN: a machine state and a customer input
+;RETURNS: the state of the machine that should follow the customer's input
+;STRATEGY : cases on customer input
+(define (machine-next-state MachineState ci)
+
+   (cond
+    [(number=? ci)    
+     (make-MachineState (MachineState carrotbags) (MachineState kalebags) (+ ((MachineState bank) unspecified) ci))]
+    
+    [(string=? ci "kale") (if (and (> (machine-remaining-kale MachineState) 0) (> ((MachineState bank) unspecified) 3))   
+     (make-MachineState (MachineState carrotbags) (- (MachineState kalebags) 1) (transfer-bal (MachineState bank) 3)) "transaction failed")]
+    
+    [(string=? ci "carrots")    (if (and (> (machine-remaining-kale MachineState) 0) (> ((MachineState bank) unspecified) 2))  
+     (make-MachineState (- (MachineState carrotbags) 1) (MachineState kalebags) (transfer-bal (MachineState bank) 2)) "transaction failed")]
+    
+    [(string=? ci "change")
+     (make-MachineState (MachineState carrotbags) (MachineState kalebags) (make-Bank ((MachineState bank) amount) 0)) ]))
+
+
+;;transfer-bal : Bank Quaters -> Bank
+;GIVEN: a Bank State and a number of quaters that is to be transferred
+;RETURNS : a Bank object that has the quaters transfered from unspecified to the total customer purchase amount.
+;EXAMPLES: (transfer-bal machinestate 3)
+(define (transfer-bal bank quaters)
+     (make-Bank (+ ((MachineState Bank) amount) quaters) (- ((MachineState Bank) unspecified) quaters)))
+
+;machine-output : MachineState CustomerInput -> MachineOutput
+;GIVEN: a machine state and a customer input
+;RETURNS: a MachineOutput that describes the machine's response to the
+;customer input
+#;(define (machine-output MachineState CustomerInput)
+  
+    (cond
+    [(number=? CustomerInput)    
+     ...]
+    [(string=? CustomerInput "kale")    
+     ...]
+    [(string=? CustomerInput "carrots")    
+     ...]
+    [(string=? CustomerInput "change")
+     ...]
+))
+
+
+;machine-remaining-kale : MachineState -> NonNegInt
+;GIVEN: a machine state
+;RETURNS: the number of bags of kale chips left in the machine
+(define (machine-remaining-kale MachineState)
+  (MachineState kalebages))
+
+;
+;machine-remaining-carrots : MachineState -> NonNegInt
+;GIVEN: a machine state
+;RETURNS: the number of bags of carrots left in the machine
+(define (machine-remaining-carrots MachineState)
+  (MachineState carrotbags))
+
+;machine-bank : MachineState -> NonNegInt
+;GIVEN: a machine state
+;RETURNS: the amount of money in the machine's bank, in cents
+(define (machine-bank MachineState)
+  ((MachineState Bank) amount))
+
+
+
+
+(begin-for-test
+  (check-equal? (accepting-state? (next-state "q|x" "q")) true
+    "Not an accepting state. ")
+
+   (check-equal? (error-state? (next-state "u" "e")) true
+    "It is an error state. ")
+
+ )
+
+

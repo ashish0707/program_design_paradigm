@@ -1,0 +1,112 @@
+#lang racket
+
+(require 2htdp/image)
+(require 2htdp/universe)
+(require "interfaces.rkt")
+(require "WidgetWorks.rkt")
+(require "Model.rkt")
+(require "World.rkt")
+(require "Y-Controller.rkt")
+(require "X-Controller.rkt")
+(require "XY-Controller.rkt")
+(require "Position-Controller.rkt")
+(require "VelocityController.rkt")
+
+(require rackunit)
+(require "extras.rkt")
+
+(provide ControllerFactory%)
+;; The ControllerFactory% class is a
+;; (new ControllerFactory% [world World<%>][mod Model<%>])
+
+(define ControllerFactory%
+  (class* object% (SWidget<%>)
+
+    (init-field world)  
+    (init-field model)   
+
+    (super-new) 
+
+    ;; after-key-event : KeyEvent -> Void
+    ;; GIVEN    : a key event
+    ;; EFFECT   : adds a controller in the world
+    ;; STRATEGY : Divide into cases on kev.
+    (define/public (after-key-event kev)
+      (cond
+        [(key=? kev "y") (add-controller Y-Controller%)]
+        [(key=? kev "x") (add-controller X-Controller%)]
+        [(key=? kev "z") (add-controller XY-Controller%)]
+        [(key=? kev "v") (add-controller Velocity-Controller%)]
+        [(key=? kev "p") (add-controller Position-Controller%)]))
+
+    
+    ;; add-controller : Controller% -> Void
+    ;; GIVEN    : a contoller class reference.
+    ;; EFFECT   : adds the given controller as a SWidget to world.
+    ;; STRATEGY : combine simpler functions
+    (define/public (add-controller cn-class)
+      (send world add-widget (new cn-class [model model])))
+
+    ;; add-to-scene : Scene -> Scene
+    ;; GIVEN    : a scene
+    ;; RETURNS  : same scene
+    ;; STRATEGY : combine simpler functions
+    (define/public (add-to-scene s) s)
+
+    ;; controller factory ignores these functions
+    (define/public (after-tick) this)
+    (define/public (after-drag mx my) this)
+    (define/public (after-button-down mx my) this) 
+    (define/public (after-button-up mx my) this)
+    (define/public (after-move mx my) this)
+
+    ))
+
+
+
+;;;;;;;;;;;;TESTING-FRAMEWORK;;;;;;;;;;;;;;;;;;
+
+(begin-for-test
+  (local
+    ((define m (new Model%))
+     (define w (make-world m))
+     (define C1 (new ControllerFactory% [world w][model m])))
+
+    (send C1 after-tick)
+;    (check-equal? (send m for-test:explain-state)
+;                  (list 75 50 0 0)
+;                  "x y and vx vy of the model state")
+
+    (send C1 after-drag 250 270)
+;    (check-equal? (send m for-test:explain-state)
+;                  (list 75 50 0 0)
+;                  "x y and vx vy of the model state")
+
+    (send C1 after-button-down 250 270)
+;    (check-equal? (send m for-test:explain-state)
+;                  (list 75 50 0 0)
+;                  "x y and vx vy of the model state")
+
+    (send C1 after-button-up 250 270)
+;    (check-equal? (send m for-test:explain-state)
+;                  (list 75 50 0 0)
+;                  "x y and vx vy of the model state")
+
+    (send C1 after-move 250 270)
+;    (check-equal? (send m for-test:explain-state)
+;                  (list 75 50 0 0)
+;                  "x y and vx vy of the model state")
+
+    (send C1 add-to-scene (empty-scene 600 500))
+
+    (send C1 after-key-event "y")
+    (send C1 after-key-event "x")
+    (send C1 after-key-event "z")
+    (send C1 after-key-event "v")
+    (send C1 after-key-event "p")
+    
+
+    
+    ))
+
+

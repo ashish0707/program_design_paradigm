@@ -1,0 +1,31 @@
+#lang racket
+(require rackunit)
+(require "extras.rkt")
+;(check-location "01" "q1.rkt")
+
+
+;; DATA DEFINITIONS: none
+
+;; distance-to-origin Number Number -> Number          
+;; GIVEN: Point in 2-d co-ordinate system,
+;; x : Indicates x co-ordinate of the point, y : Indicate y co-ordinate of the point 
+;; RETURNS: The distance of the point from origin.
+;; EXAMPLES:
+;; (distance-to-origin 3 4) = 5
+;; (distance-to-origin 6 8) = 10
+;; DESIGN STRATEGY: Function Composition
+
+(provide distance-to-origin)
+
+(define (distance-to-origin x y)
+
+  (sqrt (+ (* x x) (* y y)))
+
+  )
+
+;; TESTS
+(begin-for-test
+  (check-equal? (distance-to-origin 3 4) 5
+    "Distance from point (3,5) should be 4")
+  (check-equal? (distance-to-origin 6 8) 10 
+   "Distance from point (10,26) should be 24"))

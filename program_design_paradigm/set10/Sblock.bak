@@ -1,0 +1,287 @@
+#lang racket
+(require "interfaces2.rkt")
+(require rackunit)
+(require "extras.rkt")
+(require "sets.rkt")
+(require 2htdp/universe)   
+(require 2htdp/image)
+
+(provide
+ Sblock%:
+ make-block
+ 
+ )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; CONSTANTS
+
+;; CANVAS
+(define CANVAS-WIDTH 500)
+(define CANVAS-HEIGHT 600)
+(define CANVAS-WIDTH-HALF (/ CANVAS-WIDTH 2))
+(define CANVAS-HEIGHT-HALF (/ CANVAS-HEIGHT 2))
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Sblock
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; make-throbber: PosInt PosInt -> Toy
+;; GIVEN    : an x and a y position of a throbber
+;; RETURNS  : an object representing a throbber at the given position.
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-block x y listOfSblock)
+  (new Sblock%: [x x][y y]
+       [sblock-mouse-x-diff -1]
+       [sblock-mouse-y-diff -1]
+       [playground-sblocks listOfSblock]
+       ))
+
+
+;; Constructor template for Throbber%:
+;; A Throbber is a (new Throbber%: [x Integer][y Integer]
+;;  [throb-mouse-x-diff Integer][throb-mouse-y-diff Integer] [r Integer])
+;; Interpretation : An object of class Throbber%: represents
+;;                  a thobber.
+(define Sblock%:
+  (class* object% (Sblock<%>)
+    (init-field x y)                ; x and y coordinate of sblock
+    (init-field sblock-mouse-x-diff) ; difference between sblock's x and mouse
+    ; pointer's x coordinate.
+    (init-field sblock-mouse-y-diff) ; difference between sblock's y and mouse
+    ; pointer's y coordinate.
+    (init-field playground-sblocks)  ; difference between sblock's y and mouse
+    ; pointer's y coordinate.
+    (field [side 20])                ; the side of the sblock.
+    (init-field [selected? false])   ; the states whether the sblock's is
+    ; selected.
+    
+    (field [teammates empty])        ; all the sblocks that are teammates of
+    ; this block
+    
+    ;; image for displaying the sblock when unselected
+    (field [SBLOCK-UNSELECTED (square side "outline" "green")])
+    
+    ;; image for displaying the sblock when selected
+    (field [SBLOCK-SELECTED (square side "outline" "red")])
+    
+    
+    (super-new)
+    
+    ;; after-tick : -> Void
+    ;; DETAILS : a sblock ignores after-tick
+    (define/public (after-tick)
+      1)
+    
+    ;; get-team : -> ListOfBlock
+    ;; GIVEN   : no arguments.
+    ;; RETURNS : list of teammates of this block.
+    (define/public (get-team)
+      teammates) 
+    
+    ;; remove-block-from-playground-blocks : Sblock -> void
+    ;; EFFECT : remove the given sblock from the list of playground nodes
+    ;; maintined by this node.
+    (define/public (remove-block-from-playground-blocks sb)
+      (begin
+        (println (length playground-sblocks))
+        (set! playground-sblocks 
+              (filter 
+               (lambda (b)
+                 (not (equal? b sb))) playground-sblocks))
+        (println (length playground-sblocks))))
+    
+    ;; blocks-instersect? : Sblock -> Boolean
+    ;; GIVEN    : a sblock
+    ;; RETURNS  : true iff the current sblock intersects the given sblock.
+    ;; STRATEGY : combine simpler functions.
+    (define (blocks-instersect? sblock)
+      (begin
+        (and
+         (<=  (abs (- x (send sblock sblock-x))) side)
+         (<=  (abs (- y (send sblock sblock-y))) side))))
+
+    
+    ;; add-to-playground-sblocks : Sblock -> void
+    ;; GIVEN    : a sblock
+    ;; EFFECT   : adds the given sblock to playground-sblock list.
+    (define/public (add-to-playground-sblocks sblock)
+      (begin 
+        (println "adding new sblock to background list")
+        (set! playground-sblocks (cons sblock playground-sblocks))))
+
+    
+    ;; to-scene : Scene -> Scene
+    ;; GIVEN    : a scene to paint the throbber.
+    ;; RETURNS  : a scene like the given one, but with
+    ;;            this thobber painted on it.
+    ;; STRATEGY : Cases on whether the throbber is selected.
+    (define/public (add-to-scene scene)
+      (if selected?
+          (place-image SBLOCK-SELECTED x y scene)
+          (place-image SBLOCK-UNSELECTED x y scene)))
+    
+    
+    ;; after-button-down : NonNegInt NonNegInt -> Void
+    ;; GIVEN    : the location of a button-down event
+    ;; EFFECT   : Updates the difference between mouse-sblock center coordinates
+    ;;            for current block and updates the distance between 
+    ;; STRATEGY : Cases on whether the mouse is within the sblock.
+    (define/public (after-button-down mx my)
+      (if (inside-sblock? x y mx my)
+          (begin
+            (set! sblock-mouse-x-diff (- x mx)) 
+            (set! sblock-mouse-y-diff (- y my))
+            (set! selected? true)
+            (for-each 
+             (lambda(b)
+               (send b update-x-y-diff mx my))
+             teammates)
+            this)
+          this)) 
+
+    
+    ;; update-x-y-diff : NonNegInt NonNegInt -> Void
+    ;; GIVEN    : the x and y coordinate of a point to update
+    ;;            difference between center of block and given point
+    ;; EFFECT   : Updates the difference between point and sblock center
+    ;;            coordinates 
+    (define/public (update-x-y-diff mx my)
+      (begin
+      (set! sblock-mouse-x-diff (- x mx)) 
+      (set! sblock-mouse-y-diff (- y my)))) 
+    
+    
+    ;; after-drag : NonNegInt NonNegInt -> void
+    ;; GIVEN    : the x and y coordinates of the mouse pointer.
+    ;; EFFECT   : updates the location of slock and its teammate according to
+    ;;            mouse pointer. Also checks for intersection between this block
+    ;;            and its playground nodes.
+    ;; STRATEGY : Divide into Cases on whether the throbber is selected.
+    (define/public (after-drag mx my)
+      (if selected? 
+          (begin    
+            
+            (check-playground-sblock-for-intersection) 
+            
+            ;update the mouse-x,y diff of the teammates.
+            (for-each 
+             (lambda(b)
+               (send b update-x-y-diff x y))
+             teammates)
+            
+            (set! x (+ mx sblock-mouse-x-diff))
+            (set! y (+ my sblock-mouse-y-diff))  
+            
+            (for-each
+             (lambda (sblock)
+               (send sblock update-x-y-of-teammate x y)) teammates))
+          1))     
+
+    
+    ;; update-x-y-of-teammate : NonNegInt NonNegInt -> Void
+    ;; GIVEN    : the x and y coordinate of a leader sblock 
+    ;; EFFECT   : Updates the x and y coordinates
+    ;;            of this sblock according to leader sblock.
+    (define/public (update-x-y-of-teammate mx my)
+      (set! x (+ mx sblock-mouse-x-diff))
+      (set! y (+ my sblock-mouse-y-diff)))
+
+    
+    ;; add-team : ListOfSblock -> void
+    ;; GIVEN  : no arguments
+    ;; EFFECT : add the given list of sblock to the teammates without
+    ;;          duplicates.
+    (define/public (add-team lst)
+      (set! teammates (set-union lst teammates)))
+
+    
+    ;; check-playground-sblock-for-intersection : -> void
+    ;; GIVEN  : no arguments
+    ;; EFFECT : checks if the current block intersects with any playground
+    ;;          node. If true, swap their teams and removes each other from
+    ;;          their playground nodes.
+    (define (check-playground-sblock-for-intersection)
+      (for-each
+       (lambda (sblock)
+         (if (blocks-instersect? sblock)
+             (begin
+               (println "blocks intersect adding sblock to team") 
+               (println x)
+               (println y)
+               (swap-and-add-team sblock)
+               (remove-block-from-playground-blocks sblock)
+               (send sblock remove-block-from-playground-blocks this)) 
+             "do-nothing")) 
+       playground-sblocks))
+    
+
+    ;; swap-and-add-team : Sblock -> void
+    ;; GIVEN  : a Sblock to swap team with.
+    ;; EFFECT : swap and add its team with this block's team.
+    (define (swap-and-add-team sblock)
+      (for-each
+       (lambda (block)
+         (send block add-team (cons sblock (send sblock get-team)))) 
+       (cons this teammates))
+      
+      (for-each
+       (lambda (block)
+         (send block add-team (cons this teammates)))
+       (cons sblock (send sblock get-team))))
+    
+    
+    ;; after-button-up : NonNegInt NonNegInt -> void
+    ;; GIVEN    : the x and y coordinates of mouse pointer.
+    ;; Effect   : unselect the sblock.
+    ;; STRATEGY : combine simpler functions
+    (define/public (after-button-up mx my)
+      (set! selected? false)) 
+    
+    
+    ;; inside-sblock? : Integer Integer Integer Integer -> Boolean
+    ;; GIVEN    : x and y coordinates of two points respectively.
+    ;; RETURNS  : true iff the given coordinate is inside the given sblock.
+    ;; EXAMPLES : see tests below
+    ;; STRATEGY : Combine simpler function
+    (define (inside-sblock? x y mx my)
+      (and  
+       (and (< mx (+ x (/ side 2))) (> mx (- x (/ side 2))))
+       (and (< my (+ y (/ side 2))) (> my (- y (/ side 2))))))
+    
+    
+    ;; after-key-event : KeyEvent -> void
+    ;; DETAILS : a sblock ignores key events
+    (define/public (after-key-event kev) this)
+
+    
+    ;; after-drag : NonNegInt NonNegInt -> Throbber<%>
+    ;; GIVEN: the location of a move event
+    ;; DETAILS: a sblock ignores after-move
+    (define/public (after-move  mx my)
+      this)
+    
+    
+    ;; -> Int
+    ;; RETURNS: the x position of the center of the sblock
+    (define/public (sblock-x)
+      x)
+    
+    ;; -> Int
+    ;; RETURNS: the y position of the center of the sblock
+    (define/public (sblock-y)
+      y)
+
+    
+     ;; test methods, to test; the throbber state.
+    (define/public (for-test:x) x)
+    (define/public (for-test:y) y)
+    (define/public (for-test:selected?) selected?)
+    
+    ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TESTING FRAMEWORK - Sblock ;;;;;;;;;;;;;;;;

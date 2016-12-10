@@ -1,0 +1,448 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname q1) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/universe)
+(require 2htdp/image)
+
+(provide
+	 make-slip
+	 slip-color
+	 slip-name1
+	 slip-name2
+	 felleisen-roster
+	 shivers-roster
+	 possible-roster?
+	 acceptable-felleisen-answer?)
+
+(define YELLOW "yellow")
+(define BLUE "blue")
+
+(define-struct slip (color name1 name2))
+;; A Slip is a (make-slip Color String String)
+;; A Color is one of which is either yellow to blue.
+;; name1 and name2 are first and last names of students.
+
+;; template:
+;; slip-fn : Slip -> ??
+;; (define (slip-fn s)
+;; (... (slip-color s)
+;;      (slip-name1 s)
+;;      (slip-name2 s))
+
+
+;;  A Color is one of
+;; -- yellow
+;; -- blue
+
+;; template:
+;; color-fn : Color -> ??
+;; (define (color-fn c)
+;; (cond
+;;      ... (color-yellow c)
+;;          (color-blue c)))
+
+;; A ListOfSlip (LOS) is either
+;; -- empty
+;; -- (cons Slip LOS)
+
+;; TEMPLATE
+;; los-fn : LOS -> ??
+;; (define (los-fn los)
+;; (cond"
+;;     [(empty? los) ...]
+;;     [else (...
+;;             (slip-fn (first los))
+;;             (los-fn (rest los)))]))
+
+;; DATA DEFINITIONS ENDS
+
+;*******************************************************************
+
+;; felleisen-roster : ListOfSlip -> ListOfSlip
+;; GIVEN    : a list of slips
+;; RETURNS  : a list of slips containing all the students in Professor
+;; Felleisen's class, without duplication.
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions.
+(define (felleisen-roster lst)
+ (filter-duplicates (filter-slips-for-color YELLOW lst)))
+
+(begin-for-test
+  (check-equal? (felleisen-roster
+                (list
+                 (make-slip "blue" "Wang" "Xi")
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "yellow" "Shriram" "K.")))
+
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Shriram" "K."))))
+
+;*******************************************************************
+
+;;filter-duplicates : ListOfSlip -> ListOfSlip
+;; GIVEN    : a list of slips
+;; RETURNS  : a list of slips without duplicates
+;; EXAMPLES : See test cases
+;; STRATEGY : Use HOF foldr on ListOfSlips - lst
+(define (filter-duplicates lst)
+  ;(Slip LOS -> LOS) LOS ListOfSlip -> ListOfSlip
+  (foldr    
+     ;(Slip LOS -> LOS)
+     ;RETURNS : ListOfSlips without duplicates
+   (lambda (x y)
+           (cons x
+                 (filter
+                  ;; Slip -> Boolean
+                  ;; RETURNS : true iff any slip from
+                  ;; list y is similar to x
+                    (lambda (z)
+                      (not (same-slip? x z))) y))) empty lst))
+
+;;test
+(begin-for-test
+  (check-equal? (filter-duplicates
+                  (list
+                    (make-slip "yellow" "Xi" "Wang")
+                    (make-slip "yellow" "Wang" "Xi")
+                    (make-slip "blue" "Jones" "Tom")))
+                (list
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "blue" "Jones" "Tom"))))
+                 
+
+;*******************************************************************
+
+;; filter-slips-for-color : String ListOfSlips -> ListOfSlips
+;; GIVEN    : A color and a list of slips
+;; RETURNS  : Filtered list of slips according to the color provided
+;; EXAMPLES : See test cases
+;; STRATEGY : Use HOF filter on ListOfSlips - lst.
+(define (filter-slips-for-color color lst)
+  (filter
+         ;; Slip -> Boolean
+         ;; RETURNS : true iff the slip is of the given color
+         (lambda (s)
+           (same-color-slips? color s)) lst))
+
+;;test
+(begin-for-test
+  (check-equal? (filter-slips-for-color
+                 YELLOW (list
+                         (make-slip "yellow" "Wang" "Xi")
+                         (make-slip "blue" "Jones" "Tom")))
+                (list
+                         (make-slip "yellow" "Wang" "Xi"))))
+
+
+;*******************************************************************
+
+;; same-color-slips? : String Slip -> Boolean
+;; GIVEN    : A color and a slip
+;; RETURNS  : true if the slip is of same color as given
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions.
+(define (same-color-slips? color s)
+  (string=? color (slip-color s)))
+
+;;test
+(begin-for-test
+  (check-equal? (same-color-slips?
+                 YELLOW (make-slip "yellow" "Wang" "Xi")) true))
+
+;*******************************************************************
+
+
+;; is-color-yellow? : Slip -> Boolean
+;; GIVEN    : A slip
+;; RETURNS  : a Boolean indicating whether the color of slip is yellow.
+;; Example  : (is-color-yellow? (make-slip "blue" "ash" "b")) -> False
+;; STRATEGY : combine simpler functions
+(define (is-color-yellow? s)
+  (string=? (slip-color s) YELLOW))
+  
+;;test
+(begin-for-test
+  (check-equal? (is-color-yellow? (make-slip "yellow" "Wang" "Xi")) true))
+
+;*******************************************************************
+
+
+;; shivers-roster: ListOfSlip -> ListOfSlip
+;; GIVEN    : a list of slips
+;; RETURNS  : a list of slips containing all the students in Professor
+;; Shiver's class, without duplication.
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions.
+(define (shivers-roster lst)
+ (filter-duplicates (filter-slips-for-color BLUE lst)))
+
+
+(begin-for-test
+  (check-equal? (shivers-roster
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "yellow" "Shriram" "K.")))
+                (list
+                 (make-slip "blue" "Jones" "Tom"))))
+
+;*******************************************************************
+
+;; is-color-blue? : Slip -> Boolean
+;; GIVEN: A slip
+;; RETURNS: a Boolean indicating whether the color of slip is yellow.
+;; Example : (is-color-blue? (make-slip "blue" "ash" "b")) -> TRUE
+;; STRATEGY : combine simpler functions
+(define (is-color-blue? s)
+  (string=? (slip-color s) BLUE))
+
+;;test
+(begin-for-test
+  (check-equal? (is-color-blue? (make-slip "yellow" "Wang" "Xi")) false))
+
+;*******************************************************************
+
+
+;; is-duplicate-present: Slip ListOfSlip -> Boolean
+;; GIVEN    : a slip and a list of slips
+;; RETURNS  : true iff duplicate of given slip is present in the given list.
+;; EXAMPLES : See test cases
+;; STRATEGY : Use HOF ormap on ListOfSlips - lst.
+(define (is-duplicate-present s lst)
+  (ormap
+   ; Slip -> Boolean
+   ; RETURNS : true iff the give slip matches with the slip from list
+   (lambda (s1)
+          (same-slip? s s1)) lst))
+
+;;test
+(begin-for-test
+  (check-equal? (is-duplicate-present (make-slip "blue" "Jones" "Tom")
+                   (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Shriram" "K."))) true))
+  
+;*******************************************************************
+
+
+;;same-slip? Slip Slip -> Boolean
+;; GIVEN    : two slip object
+;; RETURNS  : true iff both contain same first and last name in any order.
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions
+
+(define (same-slip? s s1)
+  (or
+   (and (string=? (slip-name1 s) (slip-name1 s1))
+        (string=? (slip-name2 s) (slip-name2 s1)))
+    (and (string=? (slip-name1 s) (slip-name2 s1))
+        (string=? (slip-name2 s) (slip-name1 s1)))))
+
+;; test
+(begin-for-test
+  (check-equal? (same-slip? (make-slip "blue" "Jones" "Tom")
+                            (make-slip "blue" "Tom" "Jones")) true)) 
+;*******************************************************************
+
+
+;; acceptable-felleisen-answer? : ListOfSlip ListOfSlip -> Boolean
+;; GIVEN    : two lists of slips, lst1 and lst2
+;; RETURNS  : true iff every student on a yellow slip in lst1 appears once
+;; and only once in lst2.
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions.
+(define (acceptable-felleisen-answer? lst1 lst2)
+  (if
+   (and (is-same-color-list? YELLOW lst2)
+         (possible-roster? lst2))
+      
+    (contains-list (felleisen-roster lst1) lst2)
+    false))
+
+(begin-for-test
+  (check-equal? (acceptable-felleisen-answer?
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "yellow" "Shriram" "K."))
+
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Shriram" "K."))) true)
+
+  (check-equal? (acceptable-felleisen-answer?
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "yellow" "Shriram" "K."))
+
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Shriram" "K."))) false)
+
+   (check-equal? (acceptable-felleisen-answer?
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "blue" "Jones" "Tom")
+                 (make-slip "yellow" "Xi" "Wang")
+                 (make-slip "yellow" "ash" "b")
+                 (make-slip "yellow" "Shriram" "K."))
+
+                (list
+                 (make-slip "yellow" "Wang" "Xi")
+                 (make-slip "yellow" "Shriram" "K."))) false))
+;*******************************************************************
+
+
+;; contains-list: ListOfSlip  ListOfSlip -> Boolean
+;; GIVEN    : a two list of slips
+;; RETURNS  : true iff all elements of list1 are present in list2
+;; EXAMPLES : See test cases
+;; STRATEGY : Use HOF andmap on ListOfSlip - lst1
+(define (contains-list lst1 lst2)
+(andmap
+       ; Slip -> Boolean
+       ; RETURNS : true iff the element in list 1 is present in list 2
+       (lambda (s)
+         (is-duplicate-present s lst2)) lst1))
+
+;; test          
+(begin-for-test
+  (check-equal?
+   (contains-list (list
+                      (make-slip "yellow" "Wang" "Xi")
+                      (make-slip "yellow" "Shriram" "K."))
+                  (list
+                      (make-slip "yellow" "ash" "b")
+                      (make-slip "yellow" "Wang" "Xi")
+                      (make-slip "yellow" "Shriram" "K.")
+                      )) true))
+
+
+;*******************************************************************
+
+;; possible-roster? : ListOfSlip -> Boolean
+;; GIVEN    : a list of slips
+;; RETURNS  : true iff all the slips in the list are the same color,
+;; and no student is represented twice.
+;; EXAMPLES : See test cases
+;; STRATEGY : combine simpler functions
+(define (possible-roster? lst)
+  (if (empty? lst) true
+  (and (is-same-color-list? (slip-color (first lst)) (rest lst))
+       (not (list-has-duplicates? lst)))))
+
+;; test
+(begin-for-test
+  (check-equal?
+   (possible-roster? empty) true)
+
+  (check-equal?
+   (possible-roster? (list
+                      (make-slip "yellow" "Wang" "Xi")
+                      (make-slip "blue" "Jones" "Tom")
+                      (make-slip "yellow" "Xi" "Wang")
+                      (make-slip "yellow" "Shriram" "K."))) false))
+
+;*******************************************************************
+
+;; is-same-color-list? : ListOfSlip -> Boolean
+;; GIVEN    : a list of slips
+;; RETURNS  : true iff same color slips are present in list.
+;; EXAMPLES : see test cases
+;; STRATEGY : Use HOF andmap on ListOfSlips - lst
+(define (is-same-color-list? color lst)
+  (andmap
+   ;; Slip -> Boolean
+   ;; RETURNS : true iff the slip is same color as given.
+   (lambda (s)
+            (string=? color (slip-color s))) lst)) 
+
+;; test
+(begin-for-test
+  (check-equal?
+   (is-same-color-list? "blue" (list
+                      (make-slip "yellow" "Wang" "Xi")
+                      (make-slip "blue" "Jones" "Tom")
+                      (make-slip "yellow" "Xi" "Wang")
+                      (make-slip "yellow" "Shriram" "K."))) false))
+;*******************************************************************
+
+;; list-has-duplicates? : ListOfSlip -> Boolean
+;; GIVEN    : a list of slips
+;; WHERE    : a given list is of same color list.
+;; RETURNS  : true iff duplicates are present in list.
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions
+(define (list-has-duplicates? lst)
+(> (length lst) (length (filter-duplicates lst))))
+
+;; test
+(begin-for-test
+  (check-equal?
+   (list-has-duplicates? (list
+                      (make-slip "yellow" "Wang" "Xi")
+                      (make-slip "yellow" "Xi" "Wang")
+                      (make-slip "yellow" "Shriram" "K."))) true))
+
+;*************************************END***************************************
+              
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

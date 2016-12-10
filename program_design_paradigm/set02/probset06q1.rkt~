@@ -1,0 +1,69 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname probset06q1) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+(define-struct leaf (x y))
+(define-struct node (lson rson))
+
+;; A Tree is either
+;; -- (make-leaf Number)
+;; -- (make-node Tree Tree) 
+
+;; Template:
+;; tree-fn : Tree -> ???
+;; (define (tree-fn t)
+;;   (cond
+;;     [(leaf? t) (... (leaf-datum t))]
+;;     [else (...
+;;             (tree-fn (node-lson t))
+;;             (tree-fn (node-rson t)))]))
+
+;; tree-fold  
+;;  : (X X -> X) (Number -> X) Tree -> X
+;; Strategy: Use template for Tree on t
+(define (tree-fold combiner base t)
+  (cond
+    [(leaf? t) (base (leaf-x t) (leaf-y t))]
+    [else (combiner
+            (tree-fold combiner base 
+              (node-lson t))
+            (tree-fold combiner base 
+              (node-rson t)))]))
+
+
+
+;; number-of-nodes : Tree -> Number
+;; RETURNS: the number of nodes in the given tree.
+;; Strategy: Use HOF tree-fold on t
+(define (number-of-nodes t)
+  (tree-fold
+    ;; Number Number -> Number
+    (lambda (ans-for-lson ans-for-rson)
+      (+ 1 ans-for-lson ans-for-rson))
+    (lambda (num) 1)
+    t))
+
+;; increment-all : Tree -> Tree
+;; RETURNS: a tree just like the original, but in which all of the
+;; leaves have contents one more  than in the original.
+;; STRATEGY: Use HOF tree-fold on t
+(define (increment-all t newx newy)
+  (tree-fold
+    ;; Number Number -> Number
+    (lambda (ans-for-lson ans-for-rson)
+      (make-node ans-for-lson ans-for-rson))
+    (lambda (x y) (make-leaf (+ x newx) (+ y newy)))
+    t))
+
+(define tree1 
+  (make-node
+    (make-node 
+      (make-leaf 3 5)
+      (make-leaf 14 16))
+    (make-node
+      (make-leaf 15 17)
+      (make-node 
+        (make-leaf 9 11)
+        (make-leaf 26 28)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

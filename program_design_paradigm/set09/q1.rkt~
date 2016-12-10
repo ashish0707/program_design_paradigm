@@ -1,0 +1,759 @@
+#lang racket
+(require rackunit)
+(require "extras.rkt")
+(require "interfaces.rkt")
+(require 2htdp/universe)   
+(require 2htdp/image)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; CONSTANTS
+
+(define CANVAS-WIDTH 500)
+(define CANVAS-HEIGHT 600)
+(define CANVAS-WIDTH-HALF 250)
+(define CANVAS-HEIGHT-HALF 300)
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+(define INTIAL-TIME 0)
+(define THROBBER-INITIAL-X 0)
+(define THROBBER-INITIAL-Y 0)
+
+;;;;;;;;;;;;;;;;;;;;INTERFACES;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define World<%>
+  (interface ()
+    
+    ; -> World
+    ; GIVEN: no arguments
+    ; RETURNS: the state of the world at the next tick
+    after-tick          
+    
+    ; Integer Integer MouseEvent-> World
+    ; GIVEN: a location
+    ; RETURNS: the state of the world that should follow the
+    ; given mouse event at the given location.
+    after-mouse-event
+    
+    
+    ; KeyEvent : KeyEvent -> World
+    ; GIVEN: a key event
+    ; RETURNS: the state of the world that should follow the
+    ; given key event
+    after-key-event     
+    
+    ; -> Scene
+    ; GIVEN: a scene
+    ; RETURNS: a scene that depicts this World
+    to-scene
+    ))
+
+
+;; A Metatoy is an object of any class that implements Metatoy<%>.
+(define Metatoy<%>
+  (interface 
+      
+      (World<%>)
+    
+    ;; -> ListOfToy
+    get-toys
+    
+    ))
+
+
+;; A Widget is an object whose class
+;; implements the Widget<%> interface.
+
+(define Widget<%>
+  (interface ()
+    
+    ; -> Widget
+    ; GIVEN: no arguments
+    ; RETURNS: the state of this object
+    ; that should follow after a tick
+    
+    after-tick          
+    
+    ; Integer Integer -> Widget
+    ; GIVEN: a location
+    ; RETURNS: the state of this object
+    ; that should follow the specified
+    ; mouse event at the given location.
+    
+    after-button-down
+    after-button-up
+    after-drag
+    
+    ; KeyEvent -> Widget
+    ; GIVEN: a key event 
+    ; RETURNS: the state of this object
+    ; that should follow after the given
+    ; key event
+    
+    after-key-event     
+    
+    ; Scene -> Scene
+    ; GIVEN: a scene
+    ; RETURNS: a scene like the given one,
+    ; but with this object painted on it.
+    
+    add-to-scene
+    ))
+
+
+;; A Toy is an object of any class that implements Toy<%>
+;; You will probably have three such classes, one for each kind of toy. 
+
+(define Toy<%> 
+  (interface
+      
+      ;; The interface Toy<%> inherits from the interface Widget<%>.
+      ;; This means that any class that implements Toy<%> must implement
+      ;; all the methods from Widget<%> plus all the methods defined here.
+      (Widget<%>)
+    
+    ;;  Int Int -> Toy
+    ;;  RETURNS: the state of this toy that should follow a mouse-move
+    ;;  at the given coordinates
+    after-move
+    
+    
+    ;; -> Int
+    ;; RETURNS: the x or y position of the center of the toy
+    toy-x
+    toy-y
+    
+    ;; -> Int
+    ;; RETURNS: some data related to the toy.  The interpretation of
+    ;; this data depends on the class of the toy.
+    ;; for a throbber, it is the current radius of the throbber
+    ;; for the clock, it is the current value of the clock
+    ;; for a politician, it is the current distance to the mouse
+    toy-data
+    
+    
+    ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;INTERFACES ENDS;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+; run : PosReal -> World
+; GIVEN: a frame rate, in secs/tick
+; EFFECT: runs an initial world at the given frame rate
+; RETURNS: the final state of the world
+(define (run rate)
+  (big-bang (initial-world)
+            (on-tick
+             (lambda (w) (send w after-tick))
+             rate)
+            (on-draw
+             (lambda (w) (send w to-scene)))
+            (on-key
+             (lambda (w kev)
+               (send w after-key-event kev)))
+            (on-mouse
+             (lambda (w mx my mev)
+               (send w after-mouse-event mx my mev)))))
+
+
+
+;; make-world : ListOfWidget Time -> World
+;; GIVEN: a list of widgets and a time
+;; RETURNS: an object of class World% containing
+;; the given list of widgets and time.
+;; EXAMPLE : see test cases
+;; STRATEGY : combine simpler functions
+(define (make-world widgets x y)
+  (new World% [widgets widgets][x x][y y]))
+
+;; initial-world : Any -> World
+;; GIVEN: a number which is discarded
+;; RETURNS: an object of class World%
+;; EXAMPLE : see test cases
+;; STRATEGY : combine simpler functions
+(define (initial-world) 
+  (make-world empty 0 0))
+
+;; Constructor template for World%:
+;; (new World% [objs ListOfWidget][t Time])
+;; Interpretation: An object of class World% takes
+;; signals from big-bang and distributes them to
+;; its widgets as appropriate.
+(define World%
+  (class* object% (Metatoy<%>)
+    
+    (init-field widgets) ;  ListOfWidget
+    (init-field x)    ;  x co-ordinate of the mouse pointer.
+    (init-field y)    ;  y co-ordinate of the mouse pointer.
+    
+    (super-new)
+    
+    (field [THROBBER-TOY-EVENT "t"])
+    (field [CLOCK-TOY-EVENT "c"])
+    (field [POLITICIAN-EVENT "p"])
+    
+    ;; after-tick : -> World
+    ;; Use HOF map on the Widgets in this World
+    (define/public (after-tick)
+      (make-world
+       (map
+        (lambda (widget) (send widget after-tick))
+        widgets)
+       x y))
+    
+    ;; to-scene : -> Scene
+    ;; Use HOF foldr on the Widgets in this World
+    (define/public (to-scene)
+      (foldr
+       (lambda (widget scene)
+         (send widget add-to-scene scene))
+       EMPTY-CANVAS
+       widgets))
+    
+    ;; after-key-event : KeyEvent -> World
+    ;; STRATEGY: Cases on kev
+    (define/public (after-key-event kev)
+      (cond
+        
+        [(key=? kev THROBBER-TOY-EVENT)
+         (new World% [widgets (add-thobber-to-world-widgets)][x x][y y])]
+        
+        [(key=? kev CLOCK-TOY-EVENT)
+         (new World% [widgets (add-clock-to-world-widgets)][x x][y y])]
+
+        [(key=? kev POLITICIAN-EVENT)
+         (new World% [widgets (add-politician-to-world-widgets)][x x][y y])]
+        
+        [else this]))
+    
+    (define (add-thobber-to-world-widgets)
+      (cons (make-thobber (/ CANVAS-WIDTH 2) (/ CANVAS-HEIGHT 2)) widgets))
+    
+    (define (add-clock-to-world-widgets)
+      (cons (make-clock  (/ CANVAS-WIDTH 2) (/ CANVAS-HEIGHT 2)) widgets))
+
+    (define (add-politician-to-world-widgets)
+      (cons (make-politician  100 100) widgets))
+
+    
+    
+    ;; world-after-mouse-event : Nat Nat MouseEvent -> World
+    ;; STRATGY: Cases on mev
+    (define/public (after-mouse-event mx my mev)
+      (cond
+        [(mouse=? mev "button-down")
+         (world-after-button-down mx my)]
+        [(mouse=? mev "drag")
+         (world-after-drag mx my)]
+        [(mouse=? mev "button-up")
+         (world-after-button-up mx my)]
+        [else (world-after-mouse-move mx my)]))
+    
+    ;; the next few functions are local functions,
+    ;; not in the interface.
+    
+    (define (world-after-button-down mx my)
+      (make-world
+       (map
+        (lambda (widget)
+          (send widget after-button-down mx my))
+        widgets)
+       x y))
+    
+    (define (world-after-button-up mx my)
+      (make-world
+       (map
+        (lambda (widget) 
+          (send widget after-button-up mx my))
+        widgets)
+       x y))
+    
+    (define (world-after-drag mx my)
+      (make-world
+       (map
+        (lambda (widget) 
+          (send widget after-drag mx my))
+        widgets)
+       x y))
+
+    (define (world-after-mouse-move mx my)
+      (make-world
+       (map
+        (lambda (widget) 
+          (send widget after-move mx my))
+        widgets)
+       x y))
+    
+    
+    (define/public (get-toys)
+      widgets)
+    
+    ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IMPLEMENTION OF WIDGETS;;;;;;;;;;;;;;;;;;;;;;
+;; THROBBER
+
+;; Constructor template for Throbber%:
+;; (new Throbber%: [x Integer][y Integer])
+;; Interpretation: An object of class Throbber%: represents
+;; a thobber.
+
+;; make-throbber: PosInt PosInt -> Toy
+;; GIVEN: an x and a y position
+;; RETURNS: an object representing a throbber at the given position.
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-thobber x y)
+  (new Throbber%: [x x][y y]
+       [throb-mouse-x-diff -1]
+       [throb-mouse-y-diff -1]
+       [r 5][selected? false][expanding? true]))
+
+(define Throbber%:
+  (class* object% (Toy<%>)
+    (init-field x y)
+    (init-field throb-mouse-x-diff); difference between circle's x and mouse
+    ; pointer's x coordinate.
+    (init-field throb-mouse-y-diff); difference between circle's y and mouse
+    ; pointer's y coordinate.
+    (init-field r) ; the radius of the throbber.
+    (init-field selected?) ; the states whether the thobber is selected.
+    (init-field expanding?) ; the states whether the thobber is expanding.
+    
+    (field [MIN-THROBBER-RADIUS 5])
+    (field [MAX-THROBBER-RADIUS 20])
+    
+    ;; image for displaying the thobber
+    (field [THOBBER-IMG-UNSELECTED (circle r "solid" "green")])
+    
+    ;; image for displaying the thobber
+    (field [THOBBER-IMG-SELECTED (circle r "outline" "green")])
+    
+    
+    (super-new)
+    
+    ;; after-tick : -> Widget
+    ;; RETURNS: A bomb like this one, but as it should
+    ;; be after a tick
+    ;; DETAILS: the bomb moves vertically by BOMB-SPEED
+    (define/public (after-tick)
+      (if selected?
+          this
+          (get-thobber-with-new-radius)))
+    
+    ;; get-thobber-with-new-radius : -> Throbber
+    ;; RETURNS  : A throbber like this one, but with radius
+    ;; increased by one or resetted to 5.
+    ;; STRATEGY : combine simpler functions
+    (define (get-thobber-with-new-radius)
+      (new Throbber%: [x x][y y]
+           [throb-mouse-x-diff throb-mouse-x-diff]
+           [throb-mouse-y-diff throb-mouse-y-diff]
+           [r (next-radius r)]
+           [selected? selected?]
+           [expanding? (should-expand?)]))
+    
+    (define (next-radius r) 
+      (if expanding?
+          (+ r 1)
+          (- r 1)))
+    
+    (define (should-expand?)
+      (cond
+        [(>= r MAX-THROBBER-RADIUS) false]
+        [(<= r MIN-THROBBER-RADIUS) true]
+        [else expanding?]))
+    
+    
+    ;; to-scene : Scene -> Scene
+    ;; RETURNS: a scene like the given one, but with
+    ;; this bomb painted on it.
+    (define/public (add-to-scene scene)
+      (if selected?
+          (place-image THOBBER-IMG-SELECTED x y scene)
+          (place-image THOBBER-IMG-UNSELECTED x y scene)))   
+    
+    ;;META to be wittern
+    (define/public (after-button-down mx my)
+      (if (in-circle? x y mx my r)
+          (new Throbber%: [x x][y y]
+                          [throb-mouse-x-diff (- x mx)]
+                          [throb-mouse-y-diff (- y my)]
+                          [r r]
+                          [selected? true]
+                          [expanding? expanding?])
+          this))
+    
+    
+    (define/public (after-drag mx my)
+      (if selected?
+      (new Throbber%: [x (+ mx throb-mouse-x-diff)]
+           [y (+ my throb-mouse-y-diff)]
+           [throb-mouse-x-diff throb-mouse-x-diff]
+           [throb-mouse-y-diff throb-mouse-y-diff]
+           [r r]
+           [selected? true]
+           [expanding? expanding?])
+      this))
+    
+    
+    (define/public (after-button-up mx my)
+      (new Throbber%: [x x]
+           [y y]
+           [throb-mouse-x-diff throb-mouse-x-diff]
+           [throb-mouse-y-diff throb-mouse-y-diff]
+           [r r]
+           [selected? false]
+           [expanding? expanding?]))
+    
+    ;; in-circle? : Mycircle Integer Integer -> Mycircle
+    ;; RETURNS true iff the given coordinate is inside the bounding box of
+    ;; the given circle.
+    ;; EXAMPLES: see tests below
+    ;; STRATEGY: Use template for Circle on c
+    (define (in-circle? x y mx my r)
+      (<= (sqrt(+ (sqr (- x mx))  (sqr (- y my))))
+          r))
+    
+    
+    (define/public (after-key-event kev) this)
+    
+    ;; test methods, to test; the bomb state.
+    (define/public (for-test:x) x)
+    (define/public (for-test:y) y)
+    
+    ;; -> Throbber
+    ;; -> RETURNS : the current throbber
+     (define/public (after-move  mousex mousey) this)
+    
+    
+    ;; -> Int
+    ;; RETURNS: the x or y position of the center of the toy
+    (define/public (toy-x) x)
+    (define/public (toy-y) y)
+    
+    ;; -> Int
+    ;; RETURNS: the radius of the thobber
+    (define/public (toy-data) r)
+    
+    ))
+
+;; CLOCK
+
+;; Constructor template for Clock%:
+;; (new Clock%: [x Integer][y Integer])
+;; Interpretation: An object of class Clock%: represents a clock displaying
+;; time.
+
+;; make-clock : Int Int NonNegInt-> Widget
+;; GIVEN    : the x and y coordinate of the thobber and a time
+;;            value indicating the creation time of that widget.
+;; RETURNS  : a new object of class Clock%: at the given location
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-clock x y)
+  (new Clock%: [x x][y y][t 0][clock-mouse-x-diff -1][clock-mouse-y-diff -1]
+       [selected? false]))
+
+(define Clock%:
+  (class* object% (Toy<%>)
+    (init-field x y)  ; the clock's x and y position
+    (init-field t) ; the time of the creation of the clock.
+    (init-field clock-mouse-x-diff); difference between clocks's x and mouse
+    ; pointer's x coordinate.
+    (init-field clock-mouse-y-diff); difference between clock's y and mouse
+    ; pointer's y coordinate.
+    (init-field selected?)
+    (field [CLOCK-RADIUS 20])
+    ;; image for displaying the clock
+    (field [CLOCK-IMG (circle CLOCK-RADIUS "solid" "red")])
+    ;; image for displaying the clock text
+    (field [CLOCK-IMG-TEXT (text (format "~a" t) 12 "black")])
+    
+    
+    (super-new)
+    
+    ;; after-tick : -> Widget
+    ;; RETURNS: A bomb like this one, but as it should
+    ;; be after a tick
+    ;; DETAILS: the bomb moves vertically by BOMB-SPEED
+    (define/public (after-tick)
+      (new Clock%: [x x][y y][t (+ t 1)]
+           [clock-mouse-x-diff clock-mouse-x-diff]
+           [clock-mouse-y-diff clock-mouse-y-diff]
+           [selected? selected?]))
+    
+    ;; to-scene : Scene -> Scene
+    ;; RETURNS: a scene like the given one, but with
+    ;; this bomb painted on it.
+    (define/public (add-to-scene scene)
+      (place-image CLOCK-IMG-TEXT x y (place-image CLOCK-IMG x y scene)))   
+    
+    ;;META to be wittern
+    (define/public (after-button-down mx my)
+      (if (in-circle? x y mx my)
+          (new Clock%: [x x][y y][t t]
+                          [clock-mouse-x-diff (- x mx)]
+                          [clock-mouse-y-diff (- y my)]
+                          [selected? true])
+          this))
+    
+    
+    (define/public (after-drag mx my)
+      (if selected?
+      (new Clock%: [x (+ mx clock-mouse-x-diff)]
+           [y (+ my clock-mouse-y-diff)]
+           [t t]
+           [clock-mouse-x-diff clock-mouse-x-diff]
+           [clock-mouse-y-diff clock-mouse-y-diff]
+           [selected? true])
+           this))
+    
+    
+    (define/public (after-button-up mx my)
+      (new Clock%: [x x]
+           [y y][t t]
+           [clock-mouse-x-diff clock-mouse-x-diff]
+           [clock-mouse-y-diff clock-mouse-y-diff]
+           [selected? false]))
+
+    ;; in-circle? : Mycircle Integer Integer -> Mycircle
+    ;; RETURNS true iff the given coordinate is inside the bounding box of
+    ;; the given circle.
+    ;; EXAMPLES: see tests below
+    ;; STRATEGY: Use template for Circle on c
+    (define (in-circle? x y mx my)
+      (<= (sqrt(+ (sqr (- x mx))  (sqr (- y my))))
+          CLOCK-RADIUS))
+    
+    (define/public (after-key-event kev) this)
+    
+    ;; test methods, to test; the bomb state.
+    (define/public (for-test:x) x)
+    (define/public (for-test:y) y)
+    
+    ;; -> Throbber
+    ;; -> RETURNS : the current throbber
+     (define/public (after-move  mousex mousey) this)
+    
+    
+    ;; -> Int
+    ;; RETURNS: the x or y position of the center of the toy
+    (define/public (toy-x) x)
+    (define/public (toy-y) y)
+    
+    ;; -> Int
+    ;; RETURNS: the radius of the thobber
+    (define/public (toy-data) t)
+    
+    ))
+
+
+;; make-politician : Int Int  Widget
+;; GIVEN    : the x and y coordinate of the thobber and a time
+;;            value indicating the creation time of that widget.
+;; RETURNS  : a new object of class Clock%: at the given location
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-politician x y)
+  (new Politician%: [x x][y y][mx (/ CANVAS-WIDTH 2)][my (/ CANVAS-HEIGHT 2)]
+        [face-number 0]))
+
+(define Politician%:
+  (class* object% (Toy<%>)
+    (init-field x y)  ; the clock's x and y position
+    (init-field mx my)
+    (init-field face-number)
+    (field [POLITICIAN1 (bitmap "hilary.png")])
+    (field [POLITICIAN2 (bitmap "donald.png")])
+    (field [SPEED 15])
+    (field [FEAR-DISTANCE 75])
+    
+    (super-new)
+    
+    ;; after-tick : -> Widget
+    ;; RETURNS: A bomb like this one, but as it should
+    ;; be after a tick
+    ;; DETAILS: the bomb moves vertically by BOMB-SPEED
+    (define/public (after-tick)
+
+      (if (is-frightened? x y mx my)
+          
+          (manage-slope (toggle-face-number) true)
+
+          (manage-slope face-number false)
+
+           ))
+
+    (define (get-new-x)
+      (if (> x mx)
+          (- x SPEED)
+          (+ x SPEED)))
+
+     (define (get-new-y)
+      (if (> y my)
+          (- y SPEED)
+          (+ y SPEED)))
+
+    (define (toggle-face-number)
+      (if (= face-number 0) 1 0))
+
+    (define (get-x-jump-value)
+      (cond
+        [(< x mx) (- x 100)]
+        [(> x mx) (+ x 100)]
+        [else mx]))
+
+    (define (get-y-jump-value)
+      (cond
+        [(< y my) (- y 100)]
+        [(> y my) (+ y 100)]
+        [else my]))
+
+
+    (define (manage-slope face-no within-range)
+      (local
+        ((define slope (calculate-slope x y mx my)))
+      (cond
+;           [(= x mx) ;; check if slope is infinity
+;             (new Politician%: [x x]
+;               [y  (if within-range
+;                       (if (<= y my)
+;                            (get-y-upper-bound-value (- y 100))
+;                            (get-y-lower-bound-value(+ y 100)))
+;                       (if (< y my)
+;                            (+ y SPEED)
+;                            (- y SPEED)))]
+;               [mx mx][my my] [face-number face-no])]
+             
+            [(< slope 1) (get-politician-with-new-x slope face-no)]
+            [(> slope 1) (get-politician-with-new-y slope face-no)])))
+
+    ;; get new-x and on its basis calulate new-y
+    (define (get-politician-with-new-x slope face-no)       
+      (local
+         ((define new-x (get-x-jump-value)))
+        
+      (new Politician%: [x new-x]
+               [y (new-y slope new-x (calculate-c slope))]
+               [mx mx][my my] [face-number face-no])
+
+
+      ))
+
+    ;; get new-y and on its basis calulate new-x
+    (define (get-politician-with-new-y slope face-no)       
+      (local
+         ((define new-y (get-y-jump-value)))
+      (new Politician%: [x (new-x slope new-y (calculate-c slope))]
+                        [y new-y]
+                        [mx mx][my my] [face-number face-no])
+
+
+      ))
+
+;    ;; check if the newy value of politician crosses mouse pointer
+;   (define (get-new-y slope new-x c)
+;     (local
+;       ((define newy (new-y slope new-x c)))
+;       (if (< y my) ;politician is coming from top
+;           (if (> newy my) ;if politician crosses mouse from top
+;               (- my 75)
+;               (get-y-upper-bound-value newy))
+;           ;; politician coming towards mouse from bottom
+;           (if (< newy my) ;if politician crosses mouse from top
+;               (+ my 75)
+;               (get-y-lower-bound-value newy)))))
+
+    ;; check if y crosses upper boundry of canvas
+    (define (get-y-upper-bound-value newy)
+      (if (< newy 0)
+          60
+          newy))
+    
+    ;; check if y crosses lower boundry of canvas
+    (define (get-y-lower-bound-value newy)
+     (if (> newy 500)
+         470
+         newy))
+      
+
+    
+   (define (calculate-slope x1 y1 x2 y2)
+     (/ (- y2 y1) (- x2 x1)))
+
+   (define (calculate-c m)
+      (- y (* m x)))
+
+    (define (new-y m new-x c)
+      (+ (* m new-x) c))
+
+    (define (new-x m new-y c)
+      (/ (- new-y c) m))
+    
+       
+    ;; to-scene : Scene -> Scene
+    ;; RETURNS: a scene like the given one, but with
+    ;; this bomb painted on it.
+    (define/public (add-to-scene scene)
+      (if (= face-number 0)
+       (place-image POLITICIAN1 x y scene)
+       (place-image POLITICIAN2 x y scene)))   
+    
+    ;;META to be wittern
+    (define/public (after-button-down mousex mousey)
+        this)
+    
+    (define/public (after-drag mousex mousey)
+       this)
+    
+    (define/public (after-button-up mousex mousey)
+        this)
+    
+    ;; is-frightened? : Integer Integer Integer Integer -> Boolean
+    ;; GIVEN    : x and y coordinates of two points respectively.
+    ;; RETURNS  : true iff the distance between the two points given is more
+    ;;            than FEAR-DISTANCE.
+    ;; EXAMPLES: see tests below
+    ;; STRATEGY: Combine simpler functions.
+    (define (is-frightened? x y mx my)
+      (<= (get-distance-between-points x y mx my)
+          FEAR-DISTANCE))
+
+    (define (get-distance-between-points x y x1 y1)
+      (sqrt(+ (sqr (- x x1))  (sqr (- y y1)))))
+    (define/public (after-key-event kev) this)
+    
+    ;; test methods, to test; the bomb state.
+    (define/public (for-test:x) x)
+    (define/public (for-test:y) y)
+    
+    ;; -> Throbber
+    ;; -> RETURNS : the current throbber
+    (define/public (after-move  mousex mousey)
+      (new Politician%: [x x][y y]
+                [mx mousex][my mousey]
+                [face-number face-number])) 
+    
+    
+    ;; -> Int
+    ;; RETURNS: the x or y position of the center of the toy
+    (define/public (toy-x) x)
+    (define/public (toy-y) y)
+    
+    ;; -> Int
+    ;; RETURNS: the radius of the thobber
+    (define/public (toy-data)
+      (sqrt(+ (sqr (- x mx))  (sqr (- y my)))))
+    
+    ))
+
+
+
+
+
+
+(run 0.5)

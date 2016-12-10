@@ -1,0 +1,835 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-intermediate-reader.ss" "lang")((modname screensaver-2) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+
+;; start with (main 0)
+
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/universe)
+(require 2htdp/image)
+(provide screensaver
+         initial-world
+         world-after-tick
+         world-after-key-event
+         world-after-mouse-event
+         circ-after-mouse-event
+         circ-selected?
+         world-circ1
+         world-circ2
+         world-paused?
+         new-circle
+         circ-x
+         circ-y
+         circ-vx
+         circ-vy)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; dimensions of the canvas
+(define CANVAS-WIDTH 400)
+(define CANVAS-HEIGHT 300)
+(define circ1-x 200)
+
+(define CIRC1-X-COORD 200)
+(define CIRC1-Y-COORD 100)
+
+(define CIRC2-X-COORD 200)
+(define CIRC2-Y-COORD 200)
+
+(define circ1-y 100)
+(define circ2-x 200)
+(define circ2-y 200)
+(define CIRC1-XVEL -12)
+(define CIRC1-YVEL 20)
+(define CIRC2-XVEL 23)
+(define CIRC2-YVEL -14)
+
+(define circ1-vx -12)
+(define circ1-vy 20)
+(define circ2-vx 23)
+(define circ2-vy -14)
+(define TEXT_HEIGHT 10)
+(define SIMLPE_CIRCLE (circle 40 "outline" "blue"))
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+(define CIRCLE_RADIUS 40)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;; DATA DEFINITIONS
+
+(define-struct world (x y circ1 circ2 button-down? paused?))
+;; A World state is a (make-world circle circle Boolean)
+;; circ1 and circ2 are the two circles
+;; paused? describes whether or not the world is paused
+
+;; template:
+;; world-fn : World -> ??
+;; (define (world-fn w)
+;;   (... (world-x w) (world-y w)
+;;     (world-circ1 w) (world-circ2 w)
+;;     (button-down? w) (world-paused? w)))
+
+
+(define-struct mycircle (x y vx vy abs-diff-x abs-diff-y selected?))
+;; A Mycircle is a (make-mycirclele NonNegInt NonNegInt Int Int Boolean)
+;; Interpretation: 
+;; x, y give the position of the circle. 
+;; vx, vy give the velocity of the circle.
+;; mx, my give the mouse clicked coordinates within the circle.
+;; selected? states whether the circle is selected by the mouse.
+
+
+;; template:
+;; mycircle-fn : Mycircle -> ??
+;; (define (mycircle-fn c)
+;; (... (circ-x-pos w) (circ-y-pos w) (circ-vx w) (circ-vy w)
+;;    (mycircle-abs-diff-x c)  (mycircle-abs-diff-y c)
+;;    (circ-selected??? w)))
+
+;;; END DATA DEFINITIONS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; HELPER FUNCTIONS FOR CIRCLE
+
+;; circ-x : Mycircle -> NonNegInt
+;; GIVEN: a Mycircle struct
+;; RETURNS: the X-coordinate of Mycircle
+;; STRATEGY : use template for Mycircle on c
+(define (circ-x c)
+  (mycircle-x c))
+
+;; circ-y : Mycircle -> NonNegInt
+;; GIVEN: a Mycircle struct
+;; RETURNS: the Y-coordinate of Mycircle
+;; STRATEGY : use template for Mycircle on c
+(define (circ-y c)
+  (mycircle-y c))
+
+;; circ-vx : Mycircle -> NonNegInt
+;; GIVEN: a Mycircle struct
+;; RETURNS: the X velocity of Mycircle
+;; STRATEGY : use template for Mycircle on c
+(define (circ-vx c)
+  (mycircle-vx c))
+
+;; circ- : Mycircle -> NonNegInt
+;; GIVEN: a Mycircle struct
+;; RETURNS: the Y velocity of Mycircle
+;; STRATEGY : use template for Mycircle on c
+(define (circ-vy c)
+  (mycircle-vy c))
+
+;; circ-selected? : Mycircle -> Boolean
+;; GIVEN: a Mycircle struct
+;; RETURNS: a boolean stating whether the circle is selected
+;; STRATEGY : use template for Mycircle on c
+(define (circ-selected? c)
+  (mycircle-selected? c))
+
+;; new-circle : NonNegInt NonNegInt Int Int -> Circle
+;; GIVEN: 2 non-negative integers x and y, and 2 integers vx and vy
+;; RETURNS: a circle centered at (x,y), which will travel with
+;; velocity (vx, vy).
+;; STRATEGY : combine simpler functions
+(define (new-circle x y vx vy)
+  (make-mycircle x y vx vy 0 0 false))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; examples of worlds, for testing
+
+(define circle1-at-188-220
+  (make-mycircle 188 220 CIRC1-XVEL CIRC1-YVEL 0 0 false))
+(define circle1-at-200-200
+  (make-mycircle CIRC1-X-COORD CIRC1-Y-COORD CIRC1-XVEL CIRC1-YVEL 0 0 false))
+(define circle2-at-200-100
+  (make-mycircle CIRC2-X-COORD CIRC2-Y-COORD CIRC2-XVEL CIRC2-YVEL 0 0 false))
+(define circle2-at-223-186
+  (make-mycircle 223 86 CIRC2-XVEL CIRC2-YVEL 0 0 false))
+
+
+(define paused-world-at-senario1
+  (make-world
+   -1 -1
+    circle1-at-200-200
+    circle2-at-200-100
+    false true))
+
+(define unpaused-world-after-senario1
+  (make-world
+   -1 -1
+    circle1-at-188-220
+    circle2-at-223-186
+    false false))
+
+(define unpaused-world-at-senario1
+  (make-world
+   -1 -1
+    circle1-at-200-200
+    circle2-at-200-100
+    false false))
+
+(define unpaused-world-buttondown-at-senario1
+  (make-world
+   220 220
+    circle1-at-200-200
+    circle2-at-200-100
+    true false))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; world-after-key-event : World KeyEvent -> World
+;; GIVEN: a world w
+;; RETURNS: the world that should follow the given world
+;; after the given key event.
+;; on space, toggle paused?-- ignore all others
+;; STRATEGY: cases on KeyEvent kev
+(define (world-after-key-event w kev)
+  (cond
+    [(is-pause-key-event? kev)
+     (world-with-paused-toggled w)]
+    [else w]))
+
+;; world-with-paused-toggled : World -> World
+;; GIVEN: a world w
+;; RETURNS: a world just like the given one, but with paused? toggled
+;; STRATEGY: use template for World on w
+(define (world-with-paused-toggled w)
+  (make-world
+   (world-x w) (world-x w)
+   (world-circ1 w) (world-circ2 w) (world-button-down? w)
+   (not (world-paused? w))))
+
+
+;; examples for testing
+(define pause-key-event " ")
+(define non-pause-key-event "q")  
+
+(begin-for-test
+  (check-equal?
+    (world-after-key-event paused-world-at-senario1 pause-key-event)
+    unpaused-world-at-senario1
+    "after pause key, a paused world should become unpaused")
+  
+  (check-equal?
+    (world-after-key-event paused-world-at-senario1 non-pause-key-event)
+    paused-world-at-senario1
+    "after non pause key, a paused world should stay paused"))
+
+;; help function for key event
+;; is-pause-key-event? : KeyEvent -> Boolean
+;; GIVEN: a KeyEvent
+;; RETURNS: true iff the KeyEvent represents a pause instruction
+(define (is-pause-key-event? ke)
+  (key=? ke " "))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; world-after-mouse-event : World Integer Integer MouseEvent -> World
+;; GIVEN: a world and a description of a mouse event
+;; RETURNS: the world that should follow the given mouse event
+;; STRATEGY: use template for World on w
+(define (world-after-mouse-event w x y event)
+  (make-world
+   x y
+   (circ-after-mouse-event (world-circ1 w) x y event)
+   (circ-after-mouse-event (world-circ2 w) x y event)
+   (mouse-ptr-after-event w event)
+   (world-paused? w)))
+
+(begin-for-test
+  ;; button-down inside circle
+ (check-equal?
+  (world-after-mouse-event
+   (make-world  0 0
+    (new-circle 200 200 10 10)
+    (new-circle 200 100 10 10) false false)
+     220 220 ;; a coordinate inside circle
+     "button-down")
+   (make-world 220 220
+    (make-mycircle 200 200 10 10 20 20 true)
+     (new-circle 200 100 10 10) true false)
+      "button down inside ciccle should select it but didn't")
+
+   ;; button-drag inside circle
+ (check-equal?
+  (world-after-mouse-event
+   (make-world  220 220
+    (make-mycircle 200 200 10 10 20 20 true)
+    (new-circle 200 100 10 10) false false)
+     221 221 ;; a coordinate inside circle
+     "drag")
+   (make-world 221 221
+    (make-mycircle 201 201 10 10 20 20 true)
+     (new-circle 200 100 10 10) true false)
+      "button drag should drag circle but didn't")
+
+ ;; button-up inside circle
+ (check-equal?
+  (world-after-mouse-event
+   (make-world  220 220
+    (make-mycircle 200 200 10 10 20 20 true)
+    (new-circle 200 100 10 10) true false)
+     220 220 ;; a coordinate inside circle
+     "button-up")
+   (make-world 220 220
+    (make-mycircle 200 200 10 10 20 20 false)
+     (new-circle 200 100 10 10) false false)
+      "button up inside ciccle should unselect it but didn't"))
+
+
+;; world-after-button-up : World Integer Integer MouseEvent -> World
+;; GIVEN: a world and a description of a mouse event
+;; RETURNS: the world that should follow the given mouse event
+;; STRATEGY: use template for World on w
+(define (mouse-ptr-after-event w event)
+  (cond
+    [(mouse=? event "button-down") true]
+    [(mouse=? event "drag") true]
+    [(mouse=? event "button-up") false]
+    [else false]))
+
+;; circ-after-mouse-event : Circle Integer Integer MouseEvent -> Circle
+;; GIVEN: a circle and a description of a mouse event
+;; RETURNS: the circle that should follow the given mouse event
+;; examples:  See test cases below
+;; strategy: Cases on mouse event mev
+(define (circ-after-mouse-event c mx my mev)
+  (cond
+    [(mouse=? mev "button-down") (circle-after-button-down c mx my)]
+    [(mouse=? mev "drag") (circle-after-drag c mx my)]
+    [(mouse=? mev "button-up") (circle-after-button-up c mx my)]
+    [else c]))
+
+
+;; circle-after-button-down : circle Integer Integer -> circle
+;; RETURNS: the Mycircle following a button-down at the given location.
+;; STRATEGY: Use template for Mycircle on c
+(define (circle-after-button-down c x y)
+  (if (in-circle? c x y)
+      (make-mycircle (circ-x c) (circ-y c) (circ-vx c) (circ-vy c)
+                     (- (circ-x c) x)   (- (circ-y c) y) true) c))
+
+;; tests:
+(begin-for-test
+  (check-equal? (circle-after-button-down (new-circle 200 200 10 10) 220 220)
+                (make-mycircle 200 200 10 10 20 20 true)))
+
+;; circle-after-drag : circle Integer Integer -> circle
+;; RETURNS: the Mycircle following a drag at the given location
+;; STRATEGY: Use cases for Circle on c
+(define (circle-after-drag c x y)
+ (if (circ-selected? c)
+         (make-mycircle  (+ x (mycircle-abs-diff-x c))
+                       (+ y (mycircle-abs-diff-y c))
+                       (circ-vx c) (circ-vy c) (mycircle-abs-diff-x c)
+                       (mycircle-abs-diff-y c) true) c))
+
+;; tests:
+(begin-for-test
+  
+  (check-equal?
+  (world-after-mouse-event
+   (make-world  220 180
+    (make-mycircle 200 200 10 10 20 20 true)
+    (new-circle 200 100 10 10) false false)
+     221 181 ;; a coordinate inside circle
+     "drag")
+   (make-world 221 181
+    (make-mycircle 201 201 10 10 20 20 true)
+     (new-circle 200 100 10 10) true false)
+      "1st quad drag - button drag should drag circle but didn't")
+  
+   (check-equal?
+  (world-after-mouse-event
+   (make-world  180 180
+    (make-mycircle 200 200 10 10 20 20 true)
+    (new-circle 200 100 10 10) false false)
+     181 181 ;; a coordinate inside circle
+     "drag")
+   (make-world 181 181
+    (make-mycircle 201 201 10 10 20 20 true)
+     (new-circle 200 100 10 10) true false)
+      "2nd quad drag - button drag should drag circle but didn't")
+   
+    (check-equal?
+  (world-after-mouse-event
+   (make-world  180 220
+    (make-mycircle 200 200 10 10 20 20 true)
+    (new-circle 200 100 10 10) false false)
+     181 221 ;; a coordinate inside circle
+     "drag")
+   (make-world 181 221
+    (make-mycircle 201 201 10 10 20 20 true)
+     (new-circle 200 100 10 10) true false)
+      "3rd quad drag - button drag should drag circle but didn't"))
+
+
+;; circle-after-button-up : Mycircle Integer Integer -> circle 
+;; RETURNS: the circle following a button-up at the given location
+;; STRATEGY: Use template for circle on c
+(define (circle-after-button-up c x y)
+ (unselect-circle
+  (check-x-crossing-for-buttonup
+   (check-y-crossing-for-buttonup c))))
+
+;; tests:
+(begin-for-test
+
+  (check-equal? 
+   (circle-after-button-up (make-mycircle 200 270 20 20 10 10 true) 210 280)
+   (make-mycircle 200 260 20 -20 10 10 false))
+
+ (check-equal? 
+   (circle-after-button-up (make-mycircle 370 200 20 20 10 10 true) 360 190)
+   (make-mycircle 360 200 -20 20 10 10 false))
+
+ (check-equal? 
+   (circle-after-button-up (make-mycircle 30 200 -20 20 10 10 true) 50 190)
+   (make-mycircle 40 200 20 20 10 10 false))
+
+ (check-equal? 
+   (circle-after-button-up (make-mycircle 200 30 20 -20 10 10 true) 210 40)
+   (make-mycircle 200 40 20 20 10 10 false)))
+
+;; check-x-crossing-for-buttonup : Mycircle -> Mycircle 
+;; RETURNS: the mycircle with adjusted x coordinate if crossing widht borders
+;; STRATEGY: combine simpler functions
+(define (check-x-crossing-for-buttonup c)
+  (if (is-crossing-x c) (adjust-x-distance-buttonup c) c))
+
+;; check-y-crossing-for-buttonup : Mycircle -> Mycircle 
+;; RETURNS: the mycircle with adjusted y coordinate if crossing height borders
+;; STRATEGY: combine simpler functions
+(define (check-y-crossing-for-buttonup c)
+  (if (is-crossing-y c) (adjust-y-distance-buttonup c) c))
+
+;; unselect-circle : Mycircle -> Mycircle 
+;; RETURNS: unselect the circle
+;; STRATEGY: combine simpler functions
+(define (unselect-circle c)
+ (make-mycircle (circ-x c) (circ-y c) (circ-vx c) (circ-vy c)
+                  (mycircle-abs-diff-x c) (mycircle-abs-diff-y c) false))
+
+
+;; adjust-x-distance-buttonup : Mycircle -> Mycircle
+;; RETURNS: a Mycircle that has adjusted the X-coordinate
+;; according to the canvas width.
+;; EXAMPLE: (adjust-x-distance-buttonup circle1-at-361-200) ->
+;; circle-at-360-200 where 360 and 200 and x and y coordinates
+;; STRATEGY: Divide into cases on mycircle-x
+(define (adjust-x-distance-buttonup c)
+ (cond
+  [(>=  (+ (circ-x c) (circ-vx c)) (- CANVAS-WIDTH CIRCLE_RADIUS))
+   (make-mycircle (- CANVAS-WIDTH CIRCLE_RADIUS) (circ-y c)          
+   (* (circ-vx c) -1) (circ-vy c)
+   (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+   (circ-selected? c))]
+      
+  [(<= (+ (circ-x c) (circ-vx c)) CIRCLE_RADIUS)
+   (make-mycircle  CIRCLE_RADIUS (circ-y c)
+   (* (circ-vx c) -1) (circ-vy c)
+   (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+   (circ-selected? c))]))
+ 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; adjust-y-distance-buttonup : Mycircle -> Mycircle
+;; RETURNS: a Mycircle that has adjusted the X-coordinate
+;; according to the canvas width.
+;; EXAMPLE: (adjust-y-distance-buttonup circle1-at-200-261) -> circle1-at-200-260
+;; where 200 and 260 are the x and y coordinates
+;; STRATEGY: Divide into cases on mycircle-y
+(define (adjust-y-distance-buttonup c)
+  (cond
+    [(>=  (+ (circ-y c) (circ-vy c)) (- CANVAS-HEIGHT CIRCLE_RADIUS))
+     (make-mycircle   (circ-x c) (- CANVAS-HEIGHT CIRCLE_RADIUS)         
+                 (circ-vx c) (* (circ-vy c) -1)
+                 (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+                 (circ-selected? c))]
+    
+    [(<=  (+ (circ-y c) (circ-vy c)) CIRCLE_RADIUS)
+     (make-mycircle (circ-x c) CIRCLE_RADIUS        
+                 (circ-vx c)  (* (circ-vy c) -1)
+                 (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+                 (circ-selected? c))]))
+
+
+
+;; in-circle? : Mycircle Integer Integer -> Mycircle
+;; RETURNS true iff the given coordinate is inside the bounding box of
+;; the given circle.
+;; EXAMPLES: see tests below
+;; STRATEGY: Use template for Circle on c
+(define (in-circle? c x y)
+  (<= (sqrt(+ (sqr (- (circ-x c) x))  (sqr (- (circ-y c) y)))) CIRCLE_RADIUS))
+
+
+
+;; world-after-tick : WorldState -> WorldState
+;; RETURNS: the world state that should follow the given world state
+;; after a tick.
+;; EXAMPLES: see tests below
+;; World Unpaused:
+;; (world-after-tick unpaused-world-at-senario1) = unpaused-world-at-senario1
+;; world paused:
+;; (world-after-tick paused-world-at-senario1) = paused-world-at-senario1
+;; STRATEGY: Use template for World on w
+
+(define (world-after-tick w)
+  (if (world-paused? w)
+      w
+      (make-world
+       (world-x w)
+       (world-y w)
+       (circle-after-tick (world-circ1 w))
+       (circle-after-tick (world-circ2 w))
+       (world-button-down? w)
+       (world-paused? w))))
+
+;; tests:
+(begin-for-test
+
+  (check-equal? 
+    (world-after-tick unpaused-world-at-senario1) 
+     unpaused-world-after-senario1
+     "In unpaused world, the circle should move with given velocity
+      and world should still be unpaused")
+
+  (check-equal? 
+    (world-after-tick paused-world-at-senario1)
+    paused-world-at-senario1
+    "In paused world, circle should be unmoved"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; initial-world : Any -> WorldState
+;; GIVEN: any value (ignored)
+;; RETURNS: the initial world specified in the problem set
+;; STRATEGY : combine simlper functions
+(define (initial-world y)
+  (make-world
+   -1 -1
+   (new-circle CIRC1-X-COORD CIRC1-Y-COORD CIRC1-XVEL CIRC1-YVEL)
+   (new-circle CIRC2-X-COORD CIRC2-Y-COORD CIRC2-XVEL CIRC2-YVEL)
+   false true))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; adjust-x-distance : Mycircle -> Mycircle
+;; RETURNS: a Mycircle that has adjusted the X-coordinate
+;; according to the canvas width.
+;; EXAMPLE: (adjust-x-distance circle1-at-361-200) should return a Mycircle
+;; with X-coordinate at 360 and remaining params remains unchanged.
+;; STRATEGY: Divide into cases on mycircle-x
+(define (adjust-x-distance c)
+ (cond
+  [(>=  (+ (circ-x c) (circ-vx c)) (- CANVAS-WIDTH CIRCLE_RADIUS))
+   (make-mycircle (- CANVAS-WIDTH CIRCLE_RADIUS) (+ (circ-y c) (circ-vy c) )          
+   (* (circ-vx c) -1) (circ-vy c)
+   (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+   (circ-selected? c))]
+      
+  [(<=  (+ (circ-x c) (circ-vx c)) CIRCLE_RADIUS)
+   (make-mycircle  CIRCLE_RADIUS (+ (circ-y c) (circ-vy c) )
+   (* (circ-vx c) -1) (circ-vy c)
+   (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+   (circ-selected? c))]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; adjust-y-distance : Mycircle -> Mycircle
+;; RETURNS: a Mycircle that has adjusted the X-coordinate
+;; according to the canvas width.
+;; EXAMPLE: (adjust-x-distance circle1-at-200-261) -> circle1-at-200-260
+;; a Mycircle with Y-coordinate at 260 and remaining params remains unchanged.
+;; STRATEGY: Divide into cases on mycircle-y
+(define (adjust-y-distance c)
+  (cond
+    [(>=  (+ (circ-y c) (circ-vy c)) (- CANVAS-HEIGHT CIRCLE_RADIUS))
+     (make-mycircle  (+ (circ-x c) (circ-vx c)) (- CANVAS-HEIGHT CIRCLE_RADIUS)         
+                 (circ-vx c) (* (circ-vy c) -1)
+                 (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+                 (circ-selected? c))]
+    
+    [(<=  (+ (circ-y c) (circ-vy c)) CIRCLE_RADIUS)
+     (make-mycircle  (+ (circ-x c) (circ-vx c)) CIRCLE_RADIUS        
+                 (circ-vx c)  (* (circ-vy c) -1)
+                 (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+                 (circ-selected? c))]))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; is-crossing-x : Mycircle -> Boolean
+;; RETURNS: a Boolean indicating whether the circle has breached
+;; Canvas Width - Radius boundries
+;; EXAMPLE: (is-crossing-x circle1-at-361-200) -> True
+;; STRATEGY: Divide into cases on mycircle-x
+(define (is-crossing-x c)
+  (or  (>=  (+ (circ-x c) (circ-vx c)) (- CANVAS-WIDTH CIRCLE_RADIUS))
+             (<=  (+ (circ-x c) (circ-vx c)) CIRCLE_RADIUS)))
+
+;; tests
+(begin-for-test
+ (check-equal? (is-crossing-x circle1-at-200-200) false)
+ (check-equal? (is-crossing-x (new-circle 30 186 10 10)) true)
+ (check-equal? (is-crossing-x (new-circle 370 186 10 10)) true))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; is-crossing-y : Mycircle -> Boolean
+;; RETURNS: a Boolean indicating whether the circle has breached
+;; Canvas Width - Radius boundries
+;; EXAMPLE: (is-crossing-y circle1-at-100-280) -> True
+;; STRATEGY: Divide into cases on mycircle-y
+(define (is-crossing-y c)
+ (or  (>=  (+ (circ-y c) (circ-vy c)) (- CANVAS-HEIGHT CIRCLE_RADIUS))
+             (<=  (+ (circ-y c) (circ-vy c)) CIRCLE_RADIUS)))
+  
+;; tests
+(begin-for-test
+ (check-equal? (is-crossing-y  (new-circle 300 276 10 10)) true)
+ (check-equal? (is-crossing-y  (new-circle 300 39 10 -10)) true))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; circle-after-tick : Mycircle -> Mycircle
+;; GIVEN: the state of a circle c
+;; RETURNS: the state of the given circle after a tick if it were in an
+;; unpaused world.
+;; STRATEGY: Divide into cases on c
+(define (circle-after-tick c)
+  (if  (circ-selected? c) c 
+ (cond
+  [(is-crossing-y c) (adjust-y-distance c)]
+   [(is-crossing-x c) (adjust-x-distance c)]
+
+  [else (make-mycircle
+    (+ (circ-x c) (circ-vx c) )
+    (+ (circ-y c) (circ-vy c) )          
+    (circ-vx c) (circ-vy c)
+    (mycircle-abs-diff-x c)(mycircle-abs-diff-y c)
+    (circ-selected? c))])))
+
+;; tests
+
+(begin-for-test
+ (check-equal?
+  (circle-after-tick circle1-at-200-200)
+   circle1-at-188-220
+   "test of circle-after-tick return wrong circle state")
+
+ (check-equal?
+  (circle-after-tick (new-circle 300 30 10 10))
+   (new-circle 310 40 10 -10)
+   "test of circle-after-tick return wrong circle state")
+
+ (check-equal?
+  (circle-after-tick (new-circle 300 270 10 10))
+   (new-circle 310 260 10 -10)
+   "test of circle-after-tick return wrong circle state")
+
+ (check-equal?
+  (circle-after-tick (new-circle 39 200 -10 10))
+   (new-circle 40 210 10 10)
+   "test of circle-after-tick return wrong circle state")
+
+ (check-equal?
+  (circle-after-tick (new-circle 361 100 10 10))
+   (new-circle 360 110 -10 10)
+   "test of circle-after-tick return wrong circle state"))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; MAIN FUNCTION
+;; screensaver : PosReal -> WorldState
+;; GIVEN: the speed of the simulation, in seconds/tick
+;; EFFECT: runs the simulation, starting with the initial state as
+;; specified in the problem set.
+;; RETURNS: the final state of the world
+(define (screensaver speed )
+  (big-bang (initial-world speed)
+            (on-tick world-after-tick speed)
+            (on-draw world-to-scene)
+            (on-key world-after-key-event)
+            (on-mouse world-after-mouse-event)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; place-red-circle : Int Int Scene -> Scene
+;; GIVEN : x and y coordinate of Mycircle and a scene to print circle
+;; RETURNS: a scene like the given one, but circle painted
+;; on it.
+;; STRATEGY : combine simpler functions
+(define (place-red-circle x y s)
+       (place-image 
+       (circle 5 "solid" "red")
+       x y 
+       s))
+
+;; place-circle : Mycircle Scene -> Scene
+;; GIVEN : Mycircle structure and a scene to print circle
+;; RETURNS: a scene like the given one, but with the given circle painted
+;; on it.
+;; STRATEGY : Use template for Mycircle on c
+(define (place-circle c s)
+  (if (circ-selected? c)
+      (place-image 
+       (circle CIRCLE_RADIUS "outline" "red")
+       (circ-x c) (circ-y c)
+       s)
+      (place-image 
+       (circle CIRCLE_RADIUS "outline" "blue")
+       (circ-x c) (circ-y c)
+       s)))
+
+;; test
+;; check this visually to make sure it's what you want
+(define image-of-selected-circle-at-200
+  (place-image  (circle CIRCLE_RADIUS "outline" "red") 200 200 EMPTY-CANVAS))
+
+;;; note: these only test whether place-circle calls place-image properly.
+;;; it doesn't check to see whether image-of-circle-at-200 is the right image.
+(begin-for-test
+ (check-equal? 
+   (place-circle (make-mycircle 200 200 10 10 0 0 true) EMPTY-CANVAS)
+   image-of-selected-circle-at-200
+   "place-circle circle1-at-200-200 EMPTY-CANVAS)
+    returned unexpected image or value")) 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; place-text : Mycircle Scene -> Scene
+;; GIVEN : a mycircle structure and a scene to print circle on it
+;; RETURNS: a scene like the given one, but with the given text painted
+;; on it.
+;; STRATEGY : combine simpler function
+(define (place-text c s)
+  (place-image 
+   (text (format "( ~a, ~a)" (circ-vx c) (circ-vy c)) TEXT_HEIGHT "blue")
+   (circ-x c) (circ-y c)
+   s))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; world-to-scene : World -> Scene
+;; RETURNS: a Scene that portrays the given world.
+;; EXAMPLE: (world-to-scene paused-world-at-20) should return a canvas with
+;; two circle, one at (200,100) and one at (200,200)
+;; STRATEGY: Use template for World on w
+(define (world-to-scene w)
+  (if (world-button-down? w)      
+      (place-red-circle (world-x w) (world-y w)
+       (place-text (world-circ1 w)
+        (place-circle (world-circ1 w)
+         (place-text (world-circ2 w)
+          (place-circle (world-circ2 w) EMPTY-CANVAS)))))
+      (place-text (world-circ1 w)
+       (place-circle (world-circ1 w)
+        (place-text (world-circ2 w)
+         (place-circle (world-circ2 w) EMPTY-CANVAS))))))
+
+;; tests 
+
+;; an image showing the circles at (200,200) and (200,100) with button down
+;; check this visually to make sure it's what you want
+(define image-of-unpaused-buttondown-world-at-senario1
+ (place-red-circle 220 220
+  (place-image 
+    (text (format "( ~a, ~a)" CIRC1-XVEL CIRC1-YVEL) TEXT_HEIGHT "blue")
+     CIRC1-X-COORD CIRC1-Y-COORD
+    (place-image SIMLPE_CIRCLE CIRC1-X-COORD CIRC1-Y-COORD
+     (place-image 
+      (text (format "( ~a, ~a)" CIRC2-XVEL CIRC2-YVEL) TEXT_HEIGHT "blue")
+       CIRC2-X-COORD CIRC2-Y-COORD
+      (place-image SIMLPE_CIRCLE CIRC2-X-COORD CIRC2-Y-COORD
+       EMPTY-CANVAS))))))
+
+;; To test whether world->scene calls place-image properly.
+;; Visual verifiMycircleion is needed.
+(begin-for-test
+  (check-equal? 
+    (world-to-scene unpaused-world-buttondown-at-senario1)
+    image-of-unpaused-buttondown-world-at-senario1
+    "test of world-to-scene for unpaused-world-at-senario1 failed")
+
+ 
+  )
+
+
+	
+
+(define CIRCLE-NEAR-EDGE (new-circle 45 55 30 20))
+	(define BUTTON-DOWN "button-down")
+	(define BUTTON-UP "button-up")
+	(define DRAG "drag")
+	(define SELECTED-CIRCLE-NEAR-EDGE
+	 (circ-after-mouse-event CIRCLE-NEAR-EDGE 32 32 BUTTON-DOWN))
+	(define WORLD-CIRCLE-PERFECT-BOUNCE
+	 (world-after-tick
+	  (world-after-tick
+	   (world-after-key-event
+	    (world-after-mouse-event
+	     (world-after-mouse-event
+	      (world-after-mouse-event (initial-world "Any") 200 100 "button-down")
+	      52
+	      240
+	      "drag")
+	     360
+	     260
+	     "button-up")
+	    " "))))
+
+  (test-equal?
+   "TC#1: Click outside the circle"
+   (circ-selected? (circ-after-mouse-event CIRCLE-NEAR-EDGE 100 100 BUTTON-DOWN))
+   #f)
+
+  (test-equal?
+   "TC#2: Select circle"
+   (circ-selected? SELECTED-CIRCLE-NEAR-EDGE)
+   #t)
+
+  (test-equal?
+   "TC#3: Unselect circle"
+   (circ-selected?
+    (circ-after-mouse-event SELECTED-CIRCLE-NEAR-EDGE 32 32 BUTTON-UP))
+   #f)
+
+  (test-equal?
+   "TC#4: Smooth Drag circle y-co ord"
+   (circ-y (circ-after-mouse-event SELECTED-CIRCLE-NEAR-EDGE 60 80 DRAG))
+   103)
+
+  (test-equal?
+   "TC#5: Smooth Drag cirle x-co ord"
+   (circ-x (circ-after-mouse-event SELECTED-CIRCLE-NEAR-EDGE 60 80 DRAG))
+   73)
+
+ 
+  (test-equal?
+   "TC#6: Smooth Corner Bounce vx"
+   (circ-vx (world-circ1 WORLD-CIRCLE-PERFECT-BOUNCE))
+   12)
+
+ 
+  (test-equal?
+   "TC#7: Smooth Corner Bounce vy"
+   (circ-vy (world-circ1 WORLD-CIRCLE-PERFECT-BOUNCE))
+   -20)
+
+
+(screensaver 0.5)
+(circ-after-mouse-event SELECTED-CIRCLE-NEAR-EDGE 60 80 DRAG)
+

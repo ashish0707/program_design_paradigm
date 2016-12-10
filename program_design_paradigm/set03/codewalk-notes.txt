@@ -1,0 +1,19 @@
+TA-1 Name:- Jai
+TA-2 Name:- Amit N
+
+Student1 CCIS ID:- ashish0707
+
+Design Grade:- AB
+
+Presentation Grade:- A
+TA Comments on Presentation:- 
+
+Correctness Score:- 6/15 (9 - 3 for manually correcting mistake and generating the test results)
+
+TA Comments on Design:-
+- initial-world should have test coverage
+- button-down? interp not included. bad variable name.
+- template for mycircle is wrong.
+- circle-after-tick else case should be a helper function. Also design of this function should be improved.
+- adjust-x-distance should be defined in a better way. Move data closer to where is is being modified.
+- Be consistants with mycircle, cir , Circle usage across the code

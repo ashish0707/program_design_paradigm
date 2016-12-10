@@ -1,0 +1,129 @@
+#lang racket
+
+
+(require "interfaces.rkt")
+(require "PartcileParamController.rkt")
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/image)
+(require 2htdp/universe)
+(require "Model.rkt")
+
+(provide Position-Controller%)
+
+;; The Position-Controller% class is a (new Position-Controller%)
+;; INTERPRETATION:
+;; A Position-Controller represents a Position-Controller%. This class
+;; inherits from ParticleParamController. Main job of this class is to
+;; adjust the x and y location of a particle.
+
+(define Position-Controller%
+  (class* PartcileParamController% (Controller<%>)
+
+    (inherit-field    
+     model       ;; represents model
+     x           ;; x position of the center of the Position-Controller%
+     y           ;; y position of the center of the Position-Controller%
+     saved-mx    ;; the difference between mouse pointer and
+     ;; controller's  x-coordinates
+     saved-my    ;; the difference between mouse pointer and
+     ;; controller's  y-coordinates
+     
+     handle-selected? ;; Boolean -- is the handle selected?
+     handle-x-offset  ;; offset for displaying handle
+     handle-y-offset  ;; offset for displaying handle
+     handle-size      ;; size of the handle
+     
+     dot-x       ;; x position of the particle
+     dot-y       ;; y position of the particle
+     dot-vx      ;; x velocity of the particle
+     dot-vy      ;; y velocity of the particle
+     width       ;; width of the controller
+     height      ;; height of the controller  
+     half-width  ;; half width of the controller
+     half-height ;; half height of the controller
+     controller-selected?) ;; states whether this controller is selected?
+
+
+    (super-new)
+
+    (send model register this)   
+
+    ;; after-key-event : KeyEvent -> Void
+    ;; GIVEN    : a key event
+    ;; EFFECT   : updates the model by sending a command to change 
+    ;;            the position of the particle if any.
+    ;; STRATEGY : Divide into cases on kev based on controller-selected?
+    (define/override (after-key-event kev)
+      (if controller-selected?
+          (cond
+            [(key=? "right" kev)
+             (send model execute-command
+                   (make-set-position (+ dot-x 5) "x"))]
+            [(key=? "left" kev)
+             (send model execute-command
+                   (make-set-position (- dot-x 5) "x"))]
+            [(key=? "up" kev)
+             (send model execute-command
+                   (make-set-position (- dot-y 5) "y"))]
+            [(key=? "down" kev)
+             (send model execute-command
+                   (make-set-position (+ dot-y 5) "y"))])
+            
+          1))
+
+    ;; get-display-text : -> String
+    ;; GIVEN    : no parameter
+    ;; RETURNS  : string to be displayed.
+    (define/override (get-display-text)
+      "Arrow Keys Change Position")
+
+    
+    ))
+
+;;;;;;;;;;; TESTING-FRAMEWORK;;;;;;;;;;;;;;;;;;
+
+(begin-for-test
+  (local
+    ((define m (new Model%))
+     (define pc1 (new Position-Controller% [model m]))
+     (define pc2 (new Position-Controller% [model m]))
+     )
+
+    (check-equal? (send m for-test:explain-state)
+                  (list 75 50 0 0)
+                  "Incorrect values of x and y")
+    
+    (send pc2 after-button-down 300 300)
+    
+    (send pc1 after-key-event "down")
+    (check-equal? (send m for-test:explain-state)
+                  (list 75 50 0 0)
+                  "Incorrect values of x and y. It must be 75 and 50")
+   
+    (send pc2 after-key-event "down")
+    (check-equal? (send m for-test:explain-state)
+                  (list 75 55 0 0)
+                  "Incorrect values of x. It must be 55")
+    
+    (send pc2 after-key-event "up") 
+    (check-equal? (send m for-test:explain-state)
+                  (list 75 50 0 0)
+                  "Incorrect values of x and y. It must be 75 and 50")
+    
+    (send pc2 after-key-event "right")
+    (check-equal? (send m for-test:explain-state)
+                  (list 80 50 0 0)
+                  "Incorrect values of x. It must be 80")
+    
+    (send pc2 after-key-event "left")
+    (check-equal? (send m for-test:explain-state)
+                  (list 75 50 0 0)
+                  "Incorrect values of x and y. It must be 75 and 50")
+    
+    (check-equal? (send pc2 get-display-text)
+                  "Arrow Keys Change Position"
+                  "Incorrect text is displayed")
+
+    ))
+  

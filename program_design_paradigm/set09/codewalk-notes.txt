@@ -1,0 +1,21 @@
+TA-1 Name:- Harshil
+TA-2 Name:- Revanth
+
+Design Grade for q1:- A
+Design Grade for q2:-
+Correctness Score for q1:- 14
+Correctness Score for q2:-
+
+TA Comments on Design for q1:-
+
+
+
+TA Comments on Design for q2:-
+
+Student1 CCIS ID:- sugandhakher
+Presentation Grade:- A
+TA Comments on Presentation:-
+
+Student2 CCIS ID:- ashish0707
+Presentation Grade:- A
+TA Comments on Presentation:-

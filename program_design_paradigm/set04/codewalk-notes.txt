@@ -1,0 +1,25 @@
+TA-1 Name:- Parth Bansal
+TA-2 Name:- Amit N
+
+Design Grade:- AB
+Correctness Score:- 10/15
+TA Comments on Design:-
+1. Please do not use _ in variable names (suggestion)
+2. Please do not use magic constants in your code.
+3. Try having all the scenarios of IF in a new line for better code readability.
+4. Missing halting measure for recursive functions.
+5. Wrong interpretation for name1 and name2.
+6. Wrong template for Color.
+7. Please indent your code properly.
+8. Avoid code duplication for felleisen-roster and shivers-roster.
+9. Missing error messages for test cases.
+10. Wrong strategy for list-has-duplicates?. Should have Use Template of. . .
+11. -3 for fixing code for running test suite.
+
+Student1 CCIS ID:- ashish0707
+Presentation Grade:- A
+TA Comments on Presentation:-
+
+Student2 CCIS ID:-
+Presentation Grade:-
+TA Comments on Presentation:-

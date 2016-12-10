@@ -1,0 +1,189 @@
+#lang racket
+(require 2htdp/image)
+(require 2htdp/universe)
+(require "interfaces.rkt")
+(require "HandleController.rkt")
+(require rackunit)
+(require "extras.rkt")
+(require "Model.rkt")
+
+
+(provide Y-Controller%)
+
+;;******************************* CONSTANTS *******************************
+
+(define OUTER_RECT_COLOR "blue")
+(define INNER_RECT_COLOR "black")
+(define OUTER-CIRCLE (circle 10 "solid" "red"))
+(define INNER-CIRCLE (circle 2 "solid" "black"))
+
+;;*************************************************************************
+
+(define Y-Controller%
+  (class* HandleController% (Controller<%>)
+
+    (inherit-field    
+     model       ;; represents model
+     x           ;; x position of the center of the HandleController%
+     y           ;; y position of the center of the HandleController%
+     saved-mx    ;; the difference between mouse pointer and
+                 ;; y-controller's  x-coordinates
+     saved-my    ;; the difference between mouse pointer and
+                 ;; y-controller's  y-coordinates
+     
+     handle-selected? ;; Boolean -- is the handle selected?
+     handle-x-offset  ;; offset for displaying handle
+     handle-y-offset  ;; offset for displaying handle
+     handle-size      ;; size of the handle
+     
+     dot-x       ;; x position of the particle
+     dot-y       ;; y position of the particle
+     dot-vx      ;; x velocity of the particle
+     dot-vy      ;; y velocity of the particle
+     width       ;; width of the controller
+     height      ;; height of the controller  
+     half-width  ;; half width of the controller
+     half-height ;; half height of the controller
+     paused?)    ;; true iff simulation is halted
+   
+    (super-new)
+
+    (send model register this)
+    (set! handle-x-offset 0)
+    (set! width 50)
+    (set! half-width (/ width 2))
+    
+
+    (define/override (after-drag mx my)
+      (cond
+        [paused?
+         (begin
+           (send model execute-command
+                 (make-set-position
+                  (within-bounds? 1 (- my saved-my) 99) "y")))]
+        [handle-selected?
+         (begin
+           (set! x (- mx saved-mx))
+           (set! y (- my saved-my)))]
+        [else 1]))
+
+    ;; within-bounds? : PosInt PosInt PosInt -> PosInt
+    ;; GIVEN          : low and hign value along with actual value.
+    ;; RETURNS        : max value between low and min value between
+    ;;                  actual and high value.
+    ;; STRATEGY       : combine simpler functions 
+    (define (within-bounds? lo val hi)
+      (max lo (min val hi)))
+
+  
+    ;; get-color : -> String
+    ;; GIVEN    : no parameters
+    ;; RETURNS  : a string value color depending on
+    ;;            whether the handle is selected.
+    ;; STRATEGY : Divide into Cases on handle-selected?      
+    (define (get-color)
+      (if handle-selected? "red" "black"))
+
+    
+    ;; boundry-image : -> Scene
+    ;; GIVEN    : no arguments
+    ;; RETURNS  : scene with the y-controller image painted on it
+    ;; STRATEGY : combine simpler functions
+    (define (boundry-image)
+      (let ((the-ball-image (ball-with-particle-image)))
+      (overlay
+       the-ball-image
+       (rectangle width height "outline" OUTER_RECT_COLOR)
+       (overlay/xy (square handle-size "outline" (get-color)) 0 0
+       (rectangle (+ width (* 2 handle-x-offset))
+                  (+ height (* 2 handle-y-offset))
+                  "outline" INNER_RECT_COLOR)))))
+
+    
+    ;; ball-with-particle-image : -> Scene
+    ;; GIVEN    : no arguments
+    ;; RETURNS  : scene with the data image painted on it
+    ;; STRATEGY : combine simpler functions
+    (define (ball-with-particle-image)
+         (place-image (overlay INNER-CIRCLE
+                               OUTER-CIRCLE)
+                      half-width dot-y 
+                    (rectangle width height "outline" OUTER_RECT_COLOR)))
+
+    ;; add-to-scene : Scene -> Scene
+    ;; RETURNS  : a scene as given but with this wall painted
+    ;;            on it. 
+    ;; STRATEGY : combine simpler funtions.
+    (define/override (add-to-scene scene)
+      (place-image (boundry-image) x y scene))
+
+
+    (define/public (for-test:state)
+      (list x y handle-selected? paused?))
+    ))
+
+
+;;;;;;;;;;;;;;;;TESTING-FRAMEWORK;;;;;;;;;;;;;;;;;;;
+
+(begin-for-test
+  (local
+    (
+     (define m1 (new Model%))
+     (define m2 (new Model%))
+     (define m3 (new Model%))
+     (define m4 (new Model%))
+     (define m5 (new Model% [paused? true]))
+     (define m6 (new Model%))
+     
+
+     (define x-cont1 (new Y-Controller% [model m2]))
+     (define x-cont2 (new Y-Controller% [model m3]))
+     (define x-cont3 (new Y-Controller% [model m4]))
+     (define x-cont4 (new Y-Controller% [model m5]))
+     (define x-cont5 (new Y-Controller% [model m6]))
+
+     )
+      (send m1 after-tick)
+      (send x-cont5 add-to-scene  (empty-scene 600 250))
+    
+      (send x-cont1 after-drag 200 210) 
+      (check-equal? (send x-cont1 for-test:state)
+                    (list 300 300 #f #f)
+                    "x has to be 300")
+
+    (send x-cont4 after-drag 300 300)
+    (check-equal? (send x-cont4 for-test:state)
+                  (list 300 300 #t #f))
+    
+      (send x-cont2 after-drag 160 26)
+      (check-equal? (send x-cont2 for-test:state)
+                    (list 300 300 #f #f)
+                    "x has to be set to 300")
+    
+     
+      (send x-cont4 after-button-down 201 276)
+      (check-equal? (send x-cont4 for-test:state)
+                    (list 300 300 #f #f)
+                    "handle-selected has to be true")
+
+      (send x-cont4 add-to-scene (empty-scene 600 250))
+    
+      (send x-cont3 after-button-down 226 276)
+      (check-equal? (send x-cont3 for-test:state)
+                    (list 300 300 #f #f)
+                    "paused has to be true")
+    
+      (send x-cont3 after-drag 100 100)
+      (check-equal? (send x-cont3 for-test:state)
+                    (list 300 300 #f #f)
+                    "y has to be 300")
+    
+      (send x-cont4 after-drag 100 100)
+      (check-equal? (send x-cont4 for-test:state)
+                    (list 300 300 #f #f)
+                    "x has to be 199")
+
+    ))
+  
+
+  

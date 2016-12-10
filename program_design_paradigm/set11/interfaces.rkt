@@ -1,0 +1,109 @@
+#lang racket
+(require "WidgetWorks.rkt")
+(provide
+ SWidget<%>
+ Controller<%>
+ Model<%>)
+
+;; provide the structs for Commands and Messages.
+
+(provide 
+  (struct-out set-position) 
+  (struct-out set-velocity)
+  (struct-out report-position)
+  (struct-out report-velocity))
+
+;;******************************************************************************
+;; A world is an object of any class that implements
+;; World<%>
+
+(define World<%>
+  (interface ()
+
+    ;; add-widget : SWidget -> Void
+       add-widget ; all the widgets are stateful
+
+    ;; run : PosReal -> Void
+       run
+
+    ))
+
+;;******************************************************************************
+
+;; A Controller is an object of any class that implements
+;; Controller<%>
+
+;; There will be several such classes, and there may be several
+;; objects of each such class.
+
+(define Controller<%>    
+  (interface (SWidget<%>)
+
+    ;; receive-signal -> Void
+    ;; Effect : receive a message from the model and updates the controller.
+    receive-signal
+
+
+    ;; in-controller? : Int Int -> Boolean
+    ;; returns : true iff given set of coordinate
+    ;;           is in the controller.
+    in-controller?
+
+    ;; in-handle? : Int Int -> Boolean
+    ;; returns : true iff given set of coordinate
+    ;;           is within handle of the controller.
+    in-handle?
+
+    ))
+
+;;******************************************************************************
+
+;; DATA DEFINITIONS FOR COMMUNICATING WITH MODEL
+
+;; A Command is one of 
+;;  -- (make-set-position pos)
+;; Interpretation : set the position 
+;;  -- (make-set-velocity dv)
+;; Interpretation : set the velocity
+
+;; A Signal is one of
+;; -- (make-report-position pos)
+;; -- (make-report-velocity v)
+;; Interpretation: Report the current position and velocity
+
+(define-struct set-position (pos which) #:transparent)
+(define-struct set-velocity (dv which) #:transparent)
+(define-struct report-position (pos which) #:transparent)
+(define-struct report-velocity (v which) #:transparent)
+
+;;******************************************************************************
+
+;; A Model is an object of any class that implements Model<%>.  Models
+;; will receive messages from the Container, so they must implement the
+;; SWidget<%> interface in order to do so.
+
+(define Model<%>
+  (interface ()
+
+    ;; -> Void
+    after-tick        
+
+    ;; Controller<%> -> Void
+    ;; Registers the given controller to receive signal
+    register          
+
+    ;; Command -> Void
+    ;; Executes the given command
+    execute-command   
+))
+
+
+;; CONTROLLER-MODEL AGREEMENT: 
+
+;; As soon as a controller registers with the model, the model sends
+;; the controller a pair of messages so the controller will know the
+;; current state of the model.
+;; The controller then sends the model commands, which the model is
+;; executes.
+
+

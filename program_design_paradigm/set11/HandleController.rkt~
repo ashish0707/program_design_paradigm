@@ -1,0 +1,148 @@
+#lang racket
+
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/image)
+(require 2htdp/universe)
+(require "interfaces.rkt")
+(require "MainController.rkt")
+(require "Model.rkt")
+
+(provide HandleController%)
+
+
+;; A HandleController is a (new HandleController%)
+;; INTERPRETATION:
+;; HandleController% represents a HandleController with listed properties.
+
+(define HandleController%
+  (class* MainController% (Controller<%>)
+
+  (inherit-field    
+     model          ; Model<%>
+     ; x- and y-position of the center of HandleController
+     x
+     y
+     ; position of the last button-down relative to the center of the controller. Default is 0.
+     saved-mx
+     saved-my
+     ; x- and y- coordinate sof the particle
+     dot-x
+     dot-y
+     
+    ; width            ; width of the controller
+    ; height           ; height of the controller
+    ; half-width       ; half width of the controller
+    ; half-height      ; height of the controller
+     handle-selected? ; true if the handle is selected
+     handle-x-offset  ; offset for displaying handle
+     handle-y-offset  ; offset for displaying handle
+    ; handle-size      ; size of the handle
+     )
+
+    (field [paused? false])
+        
+    (super-new)
+    (set! handle-x-offset 25)
+    (set! handle-y-offset 25)
+    
+    (send model register this)
+
+    (define/override (after-button-down mx my)
+      (cond
+        [(in-handle? mx my)
+         (begin
+           (set! handle-selected? true)
+           (set! saved-mx (- mx x))
+           (set! saved-my (- my y)))]
+        [(in-controller? mx my)
+         (begin
+           (send model execute-command true)
+           (set! paused? true)
+           (set! saved-mx (- mx dot-x))
+           (set! saved-my (- my dot-y)))]
+        [else 0]))
+
+
+   
+    (define/override (in-handle? mx my)
+      (super in-handle? mx my))
+
+   
+    (define/override (in-controller? mx my)  
+      (super in-controller? mx my))
+   
+
+    (define/override (after-button-up mx my)
+      (begin
+        (set! paused? false)
+        (send model execute-command false)
+        (set! handle-selected? false)))
+
+ 
+    (define/override (after-key-event kev) this)
+
+    (define/override (after-move mx my) this)
+    (define/override (after-drag mx my) this)
+    (define/override (add-to-scene scene) this)
+
+    ;; For Test cases
+    (define/public (for-test:explain-state)
+      (list saved-mx saved-my handle-x-offset handle-y-offset))
+    
+    ))
+
+;;;;;;;;;;;;;TESTING-FRAMEWORK;;;;;;;;;;;;;;
+
+
+(begin-for-test
+  (local
+    ((define Controller1 (new HandleController% [model (new Model%)])))
+
+    (send Controller1 after-button-down 205 230)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list -95 -70 25 25)
+                  "Mouse inside the handle")  
+    
+    (send Controller1 after-button-down 350 350)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25)
+                  "Mouse inside the controller")
+
+    (send Controller1 after-button-down 10 20)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25)
+                  "Mouse outside the controller")
+
+    (send Controller1 after-button-up 225 250)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    (send Controller1 after-button-up 225 250)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    (send Controller1 after-move 225 250)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    (send Controller1 after-drag 225 250)
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    (send Controller1 after-key-event "v")
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    (send Controller1 add-to-scene (empty-scene 600 500))
+    (check-equal? (send Controller1 for-test:explain-state)
+                  (list 275 300 25 25))
+
+    ))
+
+
+
+
+
+
+

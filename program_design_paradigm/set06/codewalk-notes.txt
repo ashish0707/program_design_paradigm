@@ -1,0 +1,25 @@
+TA-1 Name:- Jai Asher
+TA-2 Name:- Rahul Thakkar
+
+Design Grade:- B
+Correctness Score:- 15/15
+TA Comments on Design:-
+- Sometimes bigbang run doesn't display lines(joining node to grandparent) after node deletion
+- Node has unnecessary attribute Parent which is empty list
+- No invariant on Parent's interpretation 
+- No generalization for sqaure and circle: redundant code at multiple places
+- any-shape-selected? should have better name and returns statement: should have had node instead of shape
+- add-shape-to-selected-shapes has a contract violation
+- add-child condition check just had effect on posn-x so it should be just for that
+- handle-deletion-of-root-node wrong design receipe 
+- change-parent wrong contarct: parent is of type Tree
+
+
+Student1 CCIS ID:- alyakhtar
+Presentation Grade:- AB
+TA Comments on Presentation:-
+- Got confused on how the parent field is updated at the time of deletion 
+- Took ample time to describe workings of any-shape-selected?
+
+Student2 CCIS ID:- ashish0707
+Presentation Grade:- A

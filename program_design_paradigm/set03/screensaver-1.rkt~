@@ -1,0 +1,241 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-beginner-reader.ss" "lang")((modname screensaver1) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+
+;; start with (main 0)
+
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/universe)
+(require 2htdp/image)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; dimensions of the canvas
+(define CANVAS-WIDTH 400)
+(define CANVAS-HEIGHT 300)
+(define CIRC1-x 200)
+(define CIRC1-y 100)
+(define CIRC2-x 200)
+(define CIRC2-y 200)
+(define CIRC1-vx -12)
+(define CIRC1-vy 20)
+(define CIRC2-vx 23)
+(define CIRC2-vy -14)
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+
+;; dimensions of the circle
+(define HALF-CIRCLE-WIDTH  20)
+(define HALF-CIRCLE-HEIGHT 20)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;; DATA DEFINITIONS
+
+(define-struct world (circ1 circ2 paused?))
+;; A World is a (make-world circle circle Boolean)
+;; circ1 and circ2 are the two circles
+;; paused? describes whether or not the world is paused
+
+;; template:
+;; world-fn : World -> ??
+;; (define (world-fn w)
+;;   (... (world-circ1 w) (world-circ2 w) (world-paused? w)))
+
+
+(define-struct circ (x y vx vy))
+;; A Circle is a (make-circle NonNegInt NonNegInt Int Int)
+;; Interpretation: 
+;; x, y give the position of the circle. 
+;; vx, vy give the velocity of the circle. 
+;; selected? describes whether or not the cat is selected.
+
+;; template:
+;; circ-fn : circ -> ??
+;; (define (circ-fn c)
+;; (... (circ-x-pos w) (circ-y-pos w) (circ-vx w) (circ-vy w)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;TBD************************************************************************
+;; examples of worlds, for testing
+
+;(define paused-world-at-20
+;  (make-world
+;    unselected-cat1-at-20
+;    selected-cat2-at-35
+;    true))
+;
+;(define unpaused-world-at-20
+;  (make-world
+;    unselected-cat1-at-20
+;    selected-cat2-at-35
+;    false))
+;************************************************************************************************************************************************
+
+;;; END DATA DEFINITIONS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;---- world function starts ----;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; world-after-key-event : World KeyEvent -> World
+;; GIVEN: a world w
+;; RETURNS: the world that should follow the given world
+;; after the given key event.
+;; on space, toggle paused?-- ignore all others
+;; EXAMPLES: see tests below
+;; STRATEGY: cases on KeyEvent kev
+(define (world-after-key-event w kev)
+  (cond
+    [(key=? kev " ")
+     (world-with-paused-toggled w)]
+    [else w]))
+
+;; world-with-paused-toggled : World -> World
+;; RETURNS: a world just like the given one, but with paused? toggled
+;; STRATEGY: use template for World on w
+(define (world-with-paused-toggled w)
+  (make-world
+   (world-circ1 w)
+   (world-circ2 w)
+   (not (world-paused? w))))
+
+
+;; help function for key event
+;; is-pause-key-event? : KeyEvent -> Boolean
+;; GIVEN: a KeyEvent
+;; RETURNS: true iff the KeyEvent represents a pause instruction
+(define (is-pause-key-event? ke)
+  (key=? ke " "))
+
+;; examples for testing
+(define pause-key-event " ")
+(define non-pause-key-event "q")   
+
+
+;; world-after-tick : WorldState -> WorldState
+;; RETURNS: the world state that should follow the given world state
+;; after a tick.
+;; STRATEGY: Use template for World on w
+(define (world-after-tick w)
+  (if (world-paused? w)
+    w
+    (make-world
+      (circle-before-tick (world-circ1 w))
+      (circle-before-tick (world-circ2 w))
+      (world-paused? w))))
+
+;; initial-world : Any -> WorldState
+;; GIVEN: any value (ignored)
+;; RETURNS: the initial world specified in the problem set
+(define (initial-world y)
+  (make-world
+   (new-circle CIRC1-x CIRC1-y CIRC1-vx CIRC1-vy)
+   (new-circle CIRC2-x CIRC2-y CIRC2-vx CIRC2-vy)
+   false))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;----world functions end----;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; circle-before-tick : Circle -> Circle
+;; GIVEN: the state of a circle c
+;; RETURNS: the state of the given circle before a tick if it were in an
+;; unpaused world.
+;; STRATEGY: Structural Decomposition
+
+(define (circle-before-tick c)
+     
+   (circle-after-tick (tangent-to-height (tangent-to-width c))))
+
+;; circle-after-tick : Circle -> Circle
+;; GIVEN: the state of a circle c
+;; RETURNS: the state of the given circle after a tick if it were in an
+;; unpaused world.
+;; STRATEGY: Structural Decomposition
+
+(define (circle-after-tick c)
+     
+      (make-circ
+      (+ (circ-x c) (circ-vx c) )
+      (+ (circ-y c) (circ-vy c) )          
+      (circ-vx c) (circ-vy c)  
+      ))
+
+;; tangent-to-width? : Circle  -> Circle
+;; RETURNS true iff the given coordinate is inside the bounding box of
+;; the given Circle.
+;; EXAMPLES: see tests below
+;; STRATEGY: combine simpler functions
+(define (tangent-to-width c)
+   (if (or (>= (- CANVAS-WIDTH (circ-x c)) 360) (<= (- CANVAS-WIDTH (circ-x c)) 40))
+        (make-circ (circ-x c) (circ-y c)
+        (* (circ-vx c) -1) (circ-vy c)) c))
+
+;; tangent-to-width? : Circle -> Circle
+;; RETURNS true iff the given coordinate is inside the bounding box of
+;; the given Circle.
+;; EXAMPLES: see tests below
+;; STRATEGY: combine simpler functions
+(define (tangent-to-height c)
+    (if (or (>= (- CANVAS-HEIGHT (circ-y c)) 260) (<= (- CANVAS-HEIGHT (circ-y c)) 40))
+;;  (if (<= (abs (circ-y c)) 40)
+  (make-circ
+      (circ-x c)
+      (circ-y c)          
+      (circ-vx c) (* (circ-vy c) -1)) c))
+
+  
+;; screensaver : PosReal -> WorldState
+;; GIVEN: the speed of the simulation, in seconds/tick
+;; EFFECT: runs the simulation, starting with the initial state as
+;; specified in the problem set.
+;; RETURNS: the final state of the world
+(define (screensaver speed )
+  (big-bang (initial-world speed)
+            (on-tick world-after-tick speed)
+            (on-draw world-to-scene)
+            (on-key world-after-key-event)
+            ))
+
+;; world-to-scene : World -> Scene
+;; RETURNS: a Scene that portrays the given world.
+;; EXAMPLE: (world-to-scene paused-world-at-20) should return a canvas with
+;; two circle, one at (200,100) and one at (200,200)
+;; STRATEGY: Use template for World on w
+(define (world-to-scene w)
+  (place-text (world-circ1 w)
+              (place-circle
+              (world-circ1 w)
+              (place-text (world-circ2 w)
+              (place-circle (world-circ2 w) EMPTY-CANVAS)))))
+
+;; place-circle : Circle Scene -> Scene
+;; RETURNS: a scene like the given one, but with the given cat painted
+;; on it.
+(define (place-circle c s)
+  (place-image 
+    (circle 40 "outline" "blue")
+    (circ-x c) (circ-y c)
+    s))
+
+;; place-text : Circle Scene -> Scene
+;; RETURNS: a scene like the given one, but with the given text painted
+;; on it.
+(define (place-text c s)
+  (place-image 
+    (text (format "( ~a, ~a)" (circ-vx c) (circ-vy c)) 10 "blue")
+     (circ-x c) (circ-y c)
+    s))
+
+;; new-circle : NonNegInt NonNegInt Int Int -> Circle
+;; GIVEN: 2 non-negative integers x and y, and 2 integers vx and vy
+;; RETURNS: a circle centered at (x,y), which will travel with
+;; velocity (vx, vy).
+(define (new-circle x y vx vy)
+  (make-circ x y vx vy)
+  )
+
+
+
+
+
+

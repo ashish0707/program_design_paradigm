@@ -1,0 +1,271 @@
+#lang racket
+
+(require rackunit)
+(require "extras.rkt")
+(require "interfaces2.rkt")
+(require "Sblock.rkt")
+(require "WidgetWorks.rkt")
+(require 2htdp/universe)   
+(require 2htdp/image)
+
+(provide
+ make-metatoy
+ run
+ make-block
+ Metatoy<%>
+)
+
+ 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; CONSTANTS
+
+;; CANVAS
+(define CANVAS-WIDTH 600)
+(define CANVAS-HEIGHT 500)
+(define CANVAS-WIDTH-HALF (/ CANVAS-WIDTH 2))
+(define CANVAS-HEIGHT-HALF (/ CANVAS-HEIGHT 2))
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; run : PosNum -> Metatoy
+;; GIVEN   : a frame rate (in seconds/tick)
+;; EFFECT  : creates a MetaToy with no toys in it, and runs it using big-bang
+;;           at the given frame rate. 
+;; RETURNS : the final state of the Metatoy
+(define (run rate)
+  (local
+    (
+     (define new-container (container-init CANVAS-WIDTH CANVAS-HEIGHT)))
+  (begin
+    (send new-container add-stateful-widget (initial-world))
+    (send new-container run rate)))) 
+
+  
+;; make-metatoy : ListOfToy -> Metatoy
+;; GIVEN    : a list of toys
+;; RETURNS  : a Metatoy with the given list of toys.
+;; EXAMPLE  : see test cases
+;; STRATEGY : combine simpler functions
+(define (make-metatoy toys)
+ (new Metatoy% [toys toys]))
+
+
+;; initial-world : -> World
+;; RETURNS  : an object of class Metatoy%
+;; EXAMPLE  : check test cases
+;; STRATEGY : combine simpler functions
+(define (initial-world) 
+  (make-metatoy empty))
+
+
+;; Constructor template for Metatoy%:
+;; A Metatoy is a (new Metatoy% [objs ListOfWidget])
+;; Interpretation: An object of class Metatoy% takes 
+;; signals from big-bang and distributes them to
+;; its toys as appropriate.
+(define Metatoy%
+  (class* object% (Metatoy<%>)
+    
+    (init-field toys)  ;  ListOfWidget
+    (field [SBLOCK-TOY-EVENT "b"])
+
+    (super-new)
+  
+
+    ;; after-tick : -> void
+     (define/public (after-tick)
+      (for-each (lambda (toy) (send toy after-tick)) toys))
+
+    
+    ;; to-scene : -> Scene
+    ;; Use HOFC foldr on the Widgets and SWidgets in this World
+    ;; Note: the append is inefficient, but clear.  We expect that
+    ;; most of the widgets in the world will be stateful.
+    (define/public (add-to-scene myscene)
+      (foldr
+        (lambda (toy base)
+          (send toy add-to-scene base)) 
+        myscene
+        toys))
+     
+     
+    ;; after-key-event : KeyEvent -> Void
+    ;; RETURNS  : a Metatoy based on KeyEvent 'b' which create
+    ;;            sblock.
+    ;; STRATEGY : Cases on key event - kev
+    (define/public (after-key-event kev)
+      (cond
+        [(key=? kev SBLOCK-TOY-EVENT)
+          (add-sblock-to-toys)]
+        
+        [else this]))
+    
+      
+    ;; add-sblock-to-metatoys : -> Void 
+    ;; RETURNS  : A throbber toy added with to list of toy in Metatoy
+    ;; STRATEGY : Combine simpler functions
+    (define (add-sblock-to-toys)
+      (local
+        ((define new-sblock
+           (make-block CANVAS-WIDTH-HALF CANVAS-HEIGHT-HALF toys)))
+      (begin  
+         (for-each
+         (lambda (sblock)
+           (send sblock add-to-playground-sblocks new-sblock)) toys)
+
+        (set! toys
+           (cons new-sblock toys))
+        
+        ))) 
+    
+       
+    ;; after-mouse-event : NonNegInt NonNegInt MouseEvent -> Metatoy
+    ;; GIVEN   : two non negative integers indicating x and y position of 
+    ;;           the mouse and a MouseEvent.
+    ;; RETURNS : a Metatoy which follows the given MouseEvent
+    ;; STRATGY : Cases on mev
+    (define/public (after-mouse-event mx my mev)
+      (cond
+        [(mouse=? mev "button-down")
+         (after-button-down mx my)]
+        [(mouse=? mev "drag")
+         (after-drag mx my)]
+        [(mouse=? mev "button-up")
+         (after-button-up mx my)]
+        [else (after-move mx my)]))
+     
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
+    ;; the next few functions are local functions,
+    ;; not in the interface.
+    
+    ;; after-button-down : NonNegInt NonNegInt -> Metatoy
+    ;; Given    : 2 Non Negative Integers indiating mouse position
+    ;; RETURNS  : a Metatoy which should follow the MouseEve nt when the mouse
+    ;;            is pressed down at the given mouse position
+    ;; STRATEGY : Use HOF on toys
+    (define/public (after-button-down mx my)
+     (for-each
+        ;; Toy -> Toy
+        ;; RETURNS : the same toy but after after-button-down event.
+        (lambda (toy)
+          (send toy after-button-down mx my))
+        toys))
+       
+      
+     
+    ;; after-button-up : NonNegInt NonNegInt -> Metatoy
+    ;; Given    : 2 Non Negative Integers indiating mouse position
+    ;; RETURNS  : a Metatoy which should follow the MouseEvent when the mouse
+    ;;            is depressed at the given mouse position.
+    ;; STRATEGY : Use HOF on toys
+    (define/public (after-button-up mx my)
+       (for-each
+        ;; Toy -> Toy
+        ;; RETURNS : the same toy but after after-button-up event.
+        (lambda (toy) 
+          (send toy after-button-up mx my))
+        toys)) 
+    
+    
+    ;; after-drag : NonNegInt NonNegInt -> Void
+    ;; Given    : 2 Non Negative Integers indiating mouse position
+    ;; RETURNS  : a Metatoy which should follow the MouseEvent
+    ;;            when the mouse is dragged at the given mouse position.
+    ;; STRATEGY : Use HOF on toys 
+    (define/public (after-drag mx my)
+      (for-each
+        ;; Toy -> Toy
+        ;; RETURNS : the same toy but after after-drag event.
+        (lambda (toy) 
+          (send toy after-drag mx my))
+        toys))
+        
+    
+    ;; after-move : NonNegInt NonNegInt -> Metatoy
+    ;; Given    : 2 Non Negative Integers indiating mouse position
+    ;; RETURNS  : a Metatoy which should follow the MouseEvent
+    ;             when there is any other mouse event like drag, button-down,
+    ;;            or button-up.
+    ;; STRATEGY : Use HOF on toys
+    (define/public (after-move mx my)
+      (for-each
+        ;; Toy -> Toy
+        ;; RETURNS : the same toy but after after-button-move event.
+        (lambda (toy) 
+          (send toy after-move mx my)) 
+        toys))
+     
+    
+    ;; -> ListOfToy<%>
+    ;; RETURNS : a list of toys stored in Metatoy. 
+    (define/public (get-toys)
+      toys)
+     
+    ))
+
+(run 0.25)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TESTING FRAMEWORK - WORLD ;;;;;;;;;;;;;;;;;;;;;;
+;
+;(define METATOY1  (make-metatoy (list (make-clock 300 250)
+;                                      (make-throbber 300 250))))
+;
+;(define WORLD1 (initial-world))
+;
+;(define w0 (make-metatoy empty))
+;(define w1 (send w0 after-tick))
+;(define w2 (send w0 after-key-event "t"))
+;(define w3 (send w0 after-key-event "c"))
+;(define w4 (send w0 after-key-event "p"))
+;(define w14 (send w0 after-key-event "s"))
+;(define w5 (send w2 after-mouse-event 250 300 "button-down"))
+;(define w6 (send w5 after-tick))
+;(define w7 (send w1 after-mouse-event 400 150 "button-down"))
+;(define w8 (send w5 after-mouse-event 300 150 "button-up"))
+;(define w9 (send w5 after-mouse-event 400 150 "move"))
+;(define w10 (send w5 after-mouse-event 100 150 "drag"))
+;(define w11 (send (send w1 after-key-event "t")
+;                  after-mouse-event 100 150 "drag"))
+;(define w12 (send w8 to-scene))
+;(define w13 (send w0 get-toys))
+;
+;
+;(begin-for-test
+;  (check-equal? (send w0 get-toys) empty
+;                "list of toy should be empty")
+;  
+;  (check-equal? (send (first (send w2 get-toys)) toy-x)
+;                  250
+;                  "thobber added at incorrect location in world")
+;  
+;  (check-equal? (send (first (send w3 get-toys)) toy-x)
+;                  250
+;                  "clock added at incorrect location in world")
+;                       
+; (check-equal?  (send (first (send w4 get-toys)) for-test:politician-state)
+;                '(250 300 250 10 0)
+;                "state of the politician is incorrect")
+; 
+; (check-equal?  (send (first (send w2 get-toys)) for-test:selected?)
+;                false
+;                "this thobber must not be selected on button down
+;                 as mouse co-ordinate doesn't lie within its range")
+;
+; (check-equal?  (send (first (send w6 get-toys)) toy-data)
+;                6
+;                "this thobber must have its radius increased by 1 after tick")
+; 
+;  (check-equal? (send (first (send (send (send w1 after-key-event "t")
+;                  after-mouse-event 100 150 "drag") get-toys)) toy-data)
+;                5
+;                "this thobber must not be dragged as it isn't selected"))
+;
+;
+;  
+;
+;  
+;
+;
+;
+;

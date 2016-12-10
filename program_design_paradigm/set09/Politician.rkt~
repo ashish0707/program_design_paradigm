@@ -1,0 +1,326 @@
+#lang racket
+(require "interfaces.rkt")
+(require rackunit)
+(require "extras.rkt")
+(require 2htdp/universe)   
+(require 2htdp/image)
+
+(provide
+Politician%:
+make-politician
+ )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; CONSTANTS
+
+;; CANVAS
+(define THROBBER-CHANGING-FACTOR 1)
+(define CANVAS-WIDTH 500)
+(define CANVAS-HEIGHT 600)
+(define CANVAS-WIDTH-HALF (/ CANVAS-WIDTH 2))
+(define CANVAS-HEIGHT-HALF (/ CANVAS-HEIGHT 2))
+(define EMPTY-CANVAS (empty-scene CANVAS-WIDTH CANVAS-HEIGHT))
+(define POLITICIAN-JUMP-VALUE 100)
+(define INTIAL-POLI-MOUSE-Y 10)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; make-politician : Int Int -> Toy
+;; GIVEN    : the x and y coordinate of the politician toy.
+;; RETURNS  : a new object of class Politician%: at the given location.
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-politician x y)
+  (new Politician%: [x x][y y][mx CANVAS-WIDTH-HALF][my 10]
+       [face-number 0]))
+ 
+
+;; Constructor template for Politician%:
+;; (new Politician%: [x Integer][y Integer]
+;;     [mx Integer][my Integer] [face-number Integer])
+;; Interpretation: An object of class Politician%: represents a politician.
+(define Politician%:
+  (class* object% (Toy<%>)
+    (init-field x y)  ; the politician's x and y position
+    (init-field mx my) ; x and y position of the mouse pointer
+    (init-field face-number) ; indicate which face the politician should depict
+    (field [POLITICIAN1 (bitmap "hilary.png")]) ; potician1 denotes a picture of
+                                                ; hilary clinton.
+    (field [POLITICIAN2 (bitmap "donald.png")]) ; potician2 denotes a picture of
+                                                ; donald trump.
+    (field [SPEED 25]) ; speed of the politician's movement.
+    (field [FEAR-DISTANCE 75]) ; the distance from which the politician retract
+    
+    (super-new)
+    
+    ;; after-tick : -> Politician
+    ;; RETURNS  : A Politician like this one, but as it should
+    ;;            be after a tick
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 -> 
+    ;;            (new Politician%: [x 117.67][y 117.67]
+    ;;             [mx 200][my 200][face-number 1])
+    ;; STRATEGY : Divide into cases on is-frightened?.
+    (define/public (after-tick)    
+      (local
+        ((define distance (get-distance-between-points x y mx my)))
+        (if (is-frightened? distance)
+            
+            (new Politician%:
+                 [x (get-x-jump-value distance POLITICIAN-JUMP-VALUE)]
+                 [y (get-y-jump-value distance POLITICIAN-JUMP-VALUE)]
+                 [mx mx][my my]
+                 [face-number (toggle-face-number)])
+            
+            (new Politician%: 
+                 [x (get-new-x-step distance SPEED)]
+                 [y (get-new-y-step distance SPEED)]
+                 [mx mx][my my][face-number face-number])
+            
+            )))
+
+    
+    ;; get-x-jump-value: PosInt PosInt -> Integer
+    ;; GIVEN    : Distance between mouse and politician's coordinates
+    ;;            and jump distance
+    ;; RETURN   : New x- coordinate of the politician when politician is within
+    ;;            distance of 75 of the mouse pointer.
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Use cases on x and mx
+    (define (get-x-jump-value distance jump)
+      (cond
+        [(< x mx) (- x (* (/ (- mx x) distance) jump))]
+        [(> x mx) (+ x (* (/ (- x mx) distance) jump))]
+        [else x]))
+    
+    
+    ;; get-y-jump-value: PosInt PosInt -> Integer
+    ;; GIVEN    : Distance between mouse and politician's coordinates
+    ;;            and jump distance
+    ;; RETURN   : New y - coordinate of the politician when politician is 
+    ;;            within distance of 75 of the mouse pointer.
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Use cases on y and my
+    (define (get-y-jump-value distance jump)
+      (cond
+        [(< y my) (- y (* (/ (- my y) distance) jump))]
+        [(> y my) (+ y (* (/ (- y my) distance) jump))]
+        [else y]))
+    
+    
+    ;; get-new-x-step: PosInt PosInt -> Integer
+    ;; GIVEN    : Distance between mouse and politician's coordinates
+    ;;            and jump distance
+    ;; RETURN   : New x- coordinate of the politician when mouse pointer
+    ;;            is not nearby.
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Use cases on x and mx
+    (define (get-new-x-step distance jump)
+      (cond
+        [(< x mx) (+ x (* (/ (- mx x) distance) jump))]
+        [(> x mx) (- x (* (/ (- x mx) distance) jump))]
+        [else x]))
+    
+    
+    ;; get-new-y-step: Integer Integer -> Integer
+    ;; GIVEN    : Distance between mouse and politician's coordinates
+    ;;            and jump distance
+    ;; RETURN   : New y - coordinate of the politician when mouse pointer
+    ;;            is not nearby.
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Use cases on y and my
+    (define (get-new-y-step distance jump)
+      (cond
+        [(< y my) (+ y (* (/ (- my y) distance) jump))]
+        [(> y my) (- y (* (/ (- y my) distance) jump))]
+        [else y]))
+    
+    
+    ;; -> Integer
+    ;; RETURN   : change the face of the politician
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Divide on cases on face-number.
+    (define (toggle-face-number)
+      (if (= face-number 0) 1 0))
+    
+    
+    ;; add-to-scene : Scene -> Scene
+    ;; GIVEN    : a scene
+    ;; RETURNS  : a scene like the given one, but with politician painted on it
+    ;;            The politician's face-number decides the which face is to be
+    ;;            painted.
+    ;; STRATEGY : Divide on cases on face-number.
+    (define/public (add-to-scene scene)
+      (if (= face-number 0)
+          (place-image POLITICIAN1 x y scene)
+          (place-image POLITICIAN2 x y scene)))   
+    
+    
+    ;; after-button-down : NonNegInt NonNegInt -> Politician
+    ;; GIVEN: the location of a button-down event
+    ;; RETURNS : a politician like the given one, but after the mouse
+    ;; button is pressed
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 -> POLITICIAN-EXAMPLE-1
+    (define/public (after-button-down mousex mousey)
+      this)
+
+    
+    ;; after-drag : NonNegInt NonNegInt -> Politician
+    ;; GIVEN   : the location of the mouse pointer.
+    ;; RETURNS : a politician like the given one, but after a drag mouse event
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 -> POLITICIAN-EXAMPLE-1
+    (define/public (after-drag mousex mousey)
+      this)
+    
+    
+    ;; after-button-up : NonNegInt NonNegInt -> Politician
+    ;; GIVEN   : the location of the mouse pointer.
+    ;; RETURNS : a politician like the given one, but after a button-up event
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 -> POLITICIAN-EXAMPLE-1
+    (define/public (after-button-up mousex mousey)
+      this)
+
+    
+    ;; is-frightened? : Integer Integer Integer Integer -> Boolean
+    ;; GIVEN    : x and y coordinates of two points respectively.
+    ;; RETURNS  : true iff the distance between the two points given is more
+    ;;            than FEAR-DISTANCE.
+    ;; EXAMPLES : see tests below
+    ;; STRATEGY : Combine simpler functions.
+    (define (is-frightened? distance)
+      (<= distance FEAR-DISTANCE))
+    
+    
+    ;; get-distance-between-points : Integer Integer Integer Integer
+    ;; GIVEN    : x and y coordinates of politician and mouse pointer resp.
+    ;; RETURN   : distance between the position of poilitician and the mouse
+    ;; EXAMPLES : see test cases below.
+    ;; STRATEGY : Combine simpler functions
+    (define (get-distance-between-points x y x1 y1)
+      (sqrt(+ (sqr (- x x1))  (sqr (- y y1)))))
+
+    
+    ;; after-key-event : KeyEvent -> Clock%:
+    ;; RETURNS : A Politician like this one, but as it should be after the
+    ;;           given key event.
+    ;; DETAILS : a politician ignores key events
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 -> POLITICIAN-EXAMPLE-1
+    (define/public (after-key-event kev) this)
+    
+    
+    ;; after-move : NonNegInt NonNegInt -> Politician
+    ;; GIVEN    : the location of a mouse move event
+    ;; RETURNS  : a politician like the given one, but after the mouse
+    ;;            button is moved
+    ;; EXAMPLE  : POLITICIAN-EXAMPLE-1 with mouse co-ordinates 300 300
+    ;;            ->  (new Politician%: [x 100][y 100]
+    ;;                                 [mx 300][my 300][face-number 1])
+    ;; STRATEGY : Divide into cases on is-frightened?.
+    (define/public (after-move  mousex mousey)
+      (local
+        ((define distance (get-distance-between-points x y mx my)))
+        (if (is-frightened? distance)
+            
+            (new Politician%:
+                 [x (get-x-jump-value distance POLITICIAN-JUMP-VALUE)]
+                 [y (get-y-jump-value distance POLITICIAN-JUMP-VALUE)]
+                 [mx mx][my my]
+                 [face-number (toggle-face-number)])
+            
+            (new Politician%: [x x][y y]
+                 [mx mousex][my mousey]
+                 [face-number face-number])))) 
+    
+    ;; function to test Politician class output
+    (define/public (for-test:politician-state)
+      (list x y mx my face-number))
+    
+    ;; -> Int
+    ;; RETURNS : the x or y position of the center of the politician
+    (define/public (toy-x) x)
+    (define/public (toy-y) y)
+    
+    ;; -> Int
+    ;; RETURNS: the distance between politician and mouse
+    (define/public (toy-data)
+      (sqrt(+ (sqr (- x mx))  (sqr (- y my)))))
+    
+    ))
+ 
+;;;;;;;;;;;;TESTING FRAMEWORK - POLITICIAN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; for testing
+(define POLITICIAN-EXAMPLE-1 (new Politician%: [x 100][y 100]
+                 [mx 200][my 200][face-number 1]))
+
+;; make-politician1 : Int Int  Widget
+;; GIVEN    : the x and y coordinate of the thobber and a time
+;;            value indicating the creation time of that widget.
+;; RETURNS  : a new object of class Politician%: at the given location
+;             with second politician
+;; EXAMPLES : see test cases
+;; STRATEGY : combine simpler functions.
+(define (make-politician1 x y)
+  (new Politician%: [x x][y y][mx CANVAS-WIDTH-HALF][my CANVAS-HEIGHT-HALF]
+       [face-number 1]))
+
+(begin-for-test
+  (local
+    ((define p0 (make-politician 100 200))
+     (define p1 (send p0 after-tick))
+     (define p2 (send p1 add-to-scene EMPTY-CANVAS))
+     (define p3 (send p1 after-button-down 200 400))
+     (define p4 (send p1 after-drag 200 400))
+     (define p5 (send p1 after-button-up 200 400))
+     (define p6 (send p1 after-key-event "c"))
+     (define p7 (send p0 after-move 120 220))
+     (define p8 (send p7 after-tick))
+     (define p9 (send p7 toy-x))
+     (define p10 (send p7 toy-y))
+     (define p11 (send p7 toy-data))
+     (define p12 (make-politician 300 500))
+     (define p13 (send p12 after-tick))
+     (define p14 (send p13 after-move 200 300))
+     (define p15 (make-politician 250 300))
+     (define p16 (send p15 after-tick))
+     (define p17 (make-politician 300 350))
+     (define p18 (send p17 after-tick))
+     (define p19 (make-politician1 250 300))
+     (define p20 (send p19 after-tick))
+     (define p21 (send p19 add-to-scene EMPTY-CANVAS)))
+    
+    (check-equal? (send p0 toy-x) 100)
+    (check-equal? (send p0 toy-y) 200)
+    
+    (check-equal? (send (send p0 after-button-down 200 400)
+                        for-test:politician-state)
+                  (list 100 200 250 INTIAL-POLI-MOUSE-Y 0)
+                  "incorrect results after executing send command twice
+                 after-button-down")
+    
+    (check-equal? (send (send p15 after-tick) for-test:politician-state)
+                  (list 250 275 250 INTIAL-POLI-MOUSE-Y 0)
+                  "incorrect results after executing send command twice
+                 for-test:politician-state")
+    
+    (check-equal? (send (send p17 after-drag 200 400)
+                        for-test:politician-state)
+                  (list 300 350 250 INTIAL-POLI-MOUSE-Y 0)
+                  "incorrect results after executing send command twice
+                 after-drag")
+    
+    (check-equal? (send (send p13 after-button-up 200 400)
+                        for-test:politician-state)
+                  (list 297.46215779966514 475.1291464367184 250
+                        INTIAL-POLI-MOUSE-Y 0)
+                  "incorrect results after executing send command twice
+                 after-button-up")
+    
+    (check-equal? (send (send p12 after-move 200 400)
+                        for-test:politician-state)
+                  (list 300 500 200 400 0)
+                  "incorrect results after executing send command twice
+                 after-move")))
+
+

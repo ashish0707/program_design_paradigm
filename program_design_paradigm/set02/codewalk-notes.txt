@@ -1,0 +1,22 @@
+TA-1 Name:- Jai
+TA-2 Name:- Amit N
+
+Student1 CCIS ID:- ashish0707
+
+Design Grade:- B
+Correctness Score:- 11/15
+Presentation Grade:- AB
+
+TA Comments on Presentation:- Feel that was not listening to other students presentations.
+
+TA Comments on Design:-
+fsm.rkt
+- next-state is doing too many things. Make use of helper functions
+- MachineInput data definition is missing
+- Strategies are missing/wrong in lot of places.
+
+probe.rkt
+- Test coverage not 100%
+- Probe data defintion missed certain points (Probe is a (make-probe..))
+- Strategies are missing in almost all functions
+- Meta of get-direction was missing
